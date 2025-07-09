@@ -1,21 +1,11 @@
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
-import os
-import tiktoken
 import torch.nn as nn
 from torch.nn import GELU
-import random
-import urllib.request
 from datasets import load_dataset
-import time
 from tqdm import tqdm
-from maxk import MaxkModel
-import matplotlib.pyplot as plt
 import torch.nn.functional as F
-import json
-import math
-import copy
 import torch
 
 class ACE:
@@ -165,46 +155,6 @@ class RACE:
         for ace in self.aces:
             ace.clear()
         self.ases.zero_()
-
-
-
-
-def build_race_sketches(model, train_loader, cfg, device="cpu"):
-    model.to(device)
-    model.eval()
-    num_blocks = cfg["n_layers"]
-    emb_dim = cfg["emb_dim"]
-    D_out = emb_dim  # since you're ignoring heads
-
-    # Initialize one sketch per block
-    sketches = [
-        RACE(D_dim=D_out, K=16, L=10, N_M=5, D_out=D_out, device=device)
-        for _ in range(num_blocks)
-    ]
-
-    with torch.no_grad():
-        for input_batch, _ in tqdm(train_loader, desc="Building RACE Sketches"):
-            input_batch = input_batch.to(device)
-            B, T = input_batch.shape
-
-            # Initial embeddings: [B, T, D]
-            x = model.tok_emb(input_batch) + model.pos_emb(torch.arange(T, device=device))
-            x = model.drop_emb(x)
-
-            for b_idx, block in enumerate(model.trf_blocks):
-                # Extract [B, T, D] projections
-                _, k, v = block.att.get_qkv(x)
-
-                for b in range(B):
-                    for t in range(T):
-                        k_t = k[b, t]  # shape: [D]
-                        v_t = v[b, t]  # shape: [D]
-                        sketches[b_idx].add(k_t, v_t)
-
-                # Proceed with full block computation for next layer
-                x = block(x)
-
-    return sketches
 
 
 def calc_loss_acc_batch_race(input_batch, target_batch, model, device):

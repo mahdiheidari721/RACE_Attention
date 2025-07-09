@@ -1,31 +1,25 @@
 from torch.utils.data import Dataset, DataLoader
-import os
 import tiktoken
 import torch
 import torch.nn as nn
 from torch.nn import GELU
 import numpy as np
-import random
-import urllib.request
 from datasets import load_dataset
-import time
 from tqdm import tqdm
-from maxk import MaxkModel
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
 import numpy as np
-import json
-import math
-from race import build_race_sketches, calc_loss_acc_loader_race, RACE
+import time
+from race import calc_loss_acc_loader_race, RACE
 
 torch.autograd.set_detect_anomaly(True)
 
 # ------------ CONSTANTS ------------
-SAMPLE_SIZE = 15  # Reduced dataset size
+SAMPLE_SIZE = 4  # Reduced dataset size
 
 GPT_CONFIG_124M = {
     "vocab_size": 50257,    # Vocabulary size
-    "context_length": 64, # Context length
+    "context_length": 32, # Context length
     "emb_dim": 512,         # Embedding dimension
     "n_heads": 8,          # Number of attention heads
     "n_layers": 4,         # Number of layers
@@ -191,7 +185,7 @@ class RACEAttention(nn.Module):
         context_vec = torch.zeros_like(queries)  # (B, H, T, D_h)
         if use_sketches:
             sketches = [
-                RACE(D_dim=self.d_out, K=8, L=5, N_M=3, D_out=self.d_out, device=x.device)
+                RACE(D_dim=self.d_out, K=18, L=5, N_M=3, D_out=self.d_out, device=x.device)
                 for _ in range(B)
             ]
 
@@ -388,7 +382,8 @@ def calc_loss_acc_loader(data_loader, model, device, num_batches=None):
     total_acc = 0.0
 
     if len(data_loader) == 0:
-        return float("nan")
+        print("Data loader is empty for loss calculation.")
+        return float("nan"), float("nan")
     elif num_batches is None:
         num_batches = len(data_loader)
     else:
@@ -406,7 +401,7 @@ def calc_loss_acc_loader(data_loader, model, device, num_batches=None):
 
 
 # ------------ TRAINING ------------
-def train_model_simple(model, train_loader, val_loader, optimizer, device, num_epochs, eval_iter, tokenizer, gpt=False):
+def train_model_simple(model, train_loader, val_loader, optimizer, device, num_epochs, eval_iter, gpt=False):
     # Initialize lists to track losses and tokens seen
     train_losses, val_losses = [], []
     train_ppls, val_ppls = [], []
@@ -450,11 +445,17 @@ def evaluate_model(model, train_loader, val_loader, device, eval_iter, use_sketc
     model.eval()
     with torch.no_grad():
         train_loss, train_acc = calc_loss_acc_loader(train_loader, model, device, num_batches=eval_iter)
-        if use_sketches is not False and gpt is False:
+        start_val = time.time()
+        if use_sketches is True and gpt is False:
             val_loss, val_acc = calc_loss_acc_loader_race(val_loader, model, device, num_batches=eval_iter)
+            method = "RACE"
         else:
             val_loss, val_acc = calc_loss_acc_loader(val_loader, model, device, num_batches=eval_iter)
+            method = "Standard"
+        end_val = time.time()
+        val_time = end_val - start_val
     model.train()
+    print(f"🕒 Val eval time ({method}): {val_time:.2f}s")
     return train_loss, val_loss, train_acc, val_acc
 
 def load_small_tinystories():
@@ -477,7 +478,7 @@ def load_small_tinystories():
 
     train_loader = create_dataloader_v1(
         train_data,
-        batch_size=8,
+        batch_size=2,
         max_length=GPT_CONFIG_124M["context_length"],
         stride=GPT_CONFIG_124M["context_length"] // 2,
         drop_last=True,
@@ -487,7 +488,7 @@ def load_small_tinystories():
 
     val_loader = create_dataloader_v1(
         val_data,
-        batch_size=8,
+        batch_size=2,
         max_length=GPT_CONFIG_124M["context_length"],
         stride=GPT_CONFIG_124M["context_length"] // 2,
         drop_last=True,
@@ -510,10 +511,10 @@ def load_small_tinystories():
     return train_loader, val_loader
 
 def start_experiment():
-    device = "cuda"
+    device = "cpu"
     tokenizer = tiktoken.get_encoding("gpt2")
     train_loader, val_loader = load_small_tinystories()
-    num_epochs = 30
+    num_epochs = 7
 
     # ------------------ TRAINING GPT -----------------
     print("Training GPT model...")
@@ -524,7 +525,7 @@ def start_experiment():
 
     metrics_gpt = train_model_simple(
         model_gpt, train_loader, val_loader, optimizer_gpt, device,
-        num_epochs=num_epochs, eval_iter=None, tokenizer=tokenizer, gpt=True
+        num_epochs=num_epochs, eval_iter=None, gpt=True
     )
   
     # ------------------ TRAINING RACE -----------------
@@ -536,7 +537,7 @@ def start_experiment():
 
     metrics_race = train_model_simple(
         model_race, train_loader, val_loader, optimizer_race, device,
-        num_epochs=num_epochs, eval_iter=None, tokenizer=tokenizer, gpt=False
+        num_epochs=num_epochs, eval_iter=None, gpt=False
     )
 
     plot_comparison_metrics(metrics_race, metrics_gpt, "race.png")

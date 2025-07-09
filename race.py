@@ -19,7 +19,7 @@ import copy
 import torch
 
 class ACE:
-    def __init__(self, D_dim, K=18, L=220, device='cpu', seed=None):
+    def __init__(self, D_dim, K, L, device='cpu', seed=None):
         self.K = K
         self.L = L
         self.D_dim = D_dim
@@ -192,14 +192,14 @@ def build_race_sketches(model, train_loader, cfg, device="cpu"):
             x = model.drop_emb(x)
 
             for b_idx, block in enumerate(model.trf_blocks):
-                # Extract [B, T, D_out] projections
+                # Extract [B, T, D] projections
                 _, k, v = block.att.get_qkv(x)
 
-                # Flatten to [B*T, D]
-                k_flat = k.view(B * T, -1)
-                v_flat = v.view(B * T, -1)
-
-                sketches[b_idx].add_batch(k_flat, v_flat)
+                for b in range(B):
+                    for t in range(T):
+                        k_t = k[b, t]  # shape: [D]
+                        v_t = v[b, t]  # shape: [D]
+                        sketches[b_idx].add(k_t, v_t)
 
                 # Proceed with full block computation for next layer
                 x = block(x)
@@ -207,81 +207,24 @@ def build_race_sketches(model, train_loader, cfg, device="cpu"):
     return sketches
 
 
-
-
-def race_forward(model, pretrained_sketches, input_batch, device):
-    """
-    Causal inference using pretrained RACE sketches and validation-set K/V added incrementally.
-    
-    Args:
-        model: transformer model
-        pretrained_sketches: list of RACE sketches (1 per block)
-        input_batch: [B, T] token ids
-        device: torch device
-
-    Returns:
-        logits: [B, T, vocab_size]
-    """
-    input_batch = input_batch.to(device)
-    B, T = input_batch.shape
-    D = model.tok_emb.embedding_dim
-    V = model.out_head.out_features
-
-    logits = torch.zeros(B, T, V, device=device)
-
-    for b in range(B):
-        input_b = input_batch[b].unsqueeze(0)  # [1, T]
-
-        # Initial embedding
-        x = model.tok_emb(input_b) + model.pos_emb(torch.arange(T, device=device))
-        x = model.drop_emb(x)  # [1, T, D]
-
-        # # Clone one sketch per block for this sample
-        # sketches = pretrained_sketches
-
-        for blk_idx, block in enumerate(model.trf_blocks):
-            # Get Q, K, V: all shape [1, T, D]
-            q_input = block.norm1(x)
-            Q, K, V_ = block.att.get_qkv(q_input)  # no heads assumed
-
-            x_new = torch.zeros_like(Q)  # [1, T, D]
-
-            for t in range(T):
-                if t > 0:
-                    pretrained_sketches[blk_idx].add(K[0, t - 1], V_[0, t - 1])
-                x_new[0, t] = pretrained_sketches[blk_idx].score(Q[0, t])
-
-            # Residual + FFN
-            x_proj = block.att.out_proj(x_new)
-            x = x + block.drop_shortcut(x_proj)
-
-            x_ff = block.norm2(x)
-            x = x + block.drop_shortcut(block.ff(x_ff))
-
-        x = model.final_norm(x)
-        logits[b] = model.out_head(x).squeeze(0)  # [T, vocab_size]
-
-    return logits  # [B, T, vocab_size]
-
-
-
-def calc_loss_acc_batch_race(input_batch, target_batch, model, sketches, device):
+def calc_loss_acc_batch_race(input_batch, target_batch, model, device):
     input_batch, target_batch = input_batch.to(device), target_batch.to(device)
-    logits = race_forward(model, sketches, input_batch, device)
-    loss = F.cross_entropy(logits.flatten(0, 1), target_batch.flatten())
+    logits = model(input_batch, use_sketches=True)  # Forward pass with sketches
+    loss = torch.nn.functional.cross_entropy(logits.flatten(0, 1), target_batch.flatten())
+    # Compute accuracy
     with torch.no_grad():
-        predictions = logits.argmax(dim=-1)
+        predictions = logits.argmax(dim=-1)  # Get indices of max logit
         correct = (predictions == target_batch).float()
-        acc = correct.mean().item()
+        acc = correct.mean().item()  # Convert to scalar float
     return loss, acc
 
-def calc_loss_acc_loader_race(data_loader, model, sketches, device, num_batches=None):
+def calc_loss_acc_loader_race(data_loader, model, device, num_batches=None):
     total_loss = 0.0
     total_acc = 0.0
     num_batches = num_batches or len(data_loader)
     for i, (input_batch, target_batch) in enumerate(data_loader):
         if i >= num_batches: break
-        loss, acc = calc_loss_acc_batch_race(input_batch, target_batch, model, sketches, device)
+        loss, acc = calc_loss_acc_batch_race(input_batch, target_batch, model, device)
         total_loss += loss.item()
         total_acc += acc
     return total_loss / num_batches, total_acc / num_batches

@@ -16,12 +16,12 @@ import torch.nn.functional as F
 import numpy as np
 import json
 import math
-from race import build_race_sketches, race_forward, calc_loss_acc_loader_race
+from race import build_race_sketches, calc_loss_acc_loader_race, RACE
 
 torch.autograd.set_detect_anomaly(True)
 
 # ------------ CONSTANTS ------------
-SAMPLE_SIZE = 1500  # Reduced dataset size
+SAMPLE_SIZE = 15  # Reduced dataset size
 
 GPT_CONFIG_124M = {
     "vocab_size": 50257,    # Vocabulary size
@@ -159,7 +159,6 @@ class RACEAttention(nn.Module):
         self.W_value = nn.Linear(d_in, d_out, bias=qkv_bias)
         self.out_proj = nn.Linear(d_out, d_out)  # Linear layer to combine head outputs
         self.dropout = nn.Dropout(dropout)
-        self.log_gamma = nn.Parameter(torch.tensor(math.log(10.0)))  # initialize γ = 10.0
 
         self.register_buffer(
             "mask",
@@ -167,8 +166,8 @@ class RACEAttention(nn.Module):
                        diagonal=1)
         )
 
-    def forward(self, x):
-        b, num_tokens, d_in = x.shape
+    def forward(self, x, use_sketches=False):
+        B, num_tokens, d_in = x.shape
 
         keys = self.W_key(x) # Shape: (b, num_tokens, d_out)
         queries = self.W_query(x)
@@ -176,9 +175,9 @@ class RACEAttention(nn.Module):
 
         # We implicitly split the matrix by adding a `num_heads` dimension
         # Unroll last dim: (b, num_tokens, d_out) -> (b, num_tokens, num_heads, head_dim)
-        keys = keys.view(b, num_tokens, self.num_heads, self.head_dim) 
-        values = values.view(b, num_tokens, self.num_heads, self.head_dim)
-        queries = queries.view(b, num_tokens, self.num_heads, self.head_dim)
+        keys = keys.view(B, num_tokens, self.num_heads, self.head_dim) 
+        values = values.view(B, num_tokens, self.num_heads, self.head_dim)
+        queries = queries.view(B, num_tokens, self.num_heads, self.head_dim)
 
         # Transpose: (b, num_tokens, num_heads, head_dim) -> (b, num_heads, num_tokens, head_dim)
         keys = keys.transpose(1, 2)
@@ -189,27 +188,44 @@ class RACEAttention(nn.Module):
         queries = F.normalize(queries, dim=-1, p=2, eps=1e-6)
         keys = F.normalize(keys, dim=-1, p=2, eps=1e-6)
 
-        # Cosine similarity: [B, H, T_q, T_k]
-        cos_sim = queries @ keys.transpose(2, 3)
-        cos_sim = cos_sim.clamp(min=-0.999, max=0.999) 
-        # Angular similarity: 1 - arccos(cos_sim) / pi
-        attn_scores = 1 - torch.acos(cos_sim) / torch.pi
-        # Original mask truncated to the number of tokens and converted to boolean
-        mask_bool = self.mask.bool()[:num_tokens, :num_tokens]
-        attn_scores.masked_fill_(mask_bool, 0.0)
-        # gamma = torch.exp(self.log_gamma)  # ensures γ > 0
-        # print(gamma.item())
-        attn_weights = attn_scores.clamp(min=1e-6).pow(18.0)  # sharpen with γ
-        attn_weights = attn_weights / (attn_weights.sum(dim=-1, keepdim=True) + 1e-6)
+        context_vec = torch.zeros_like(queries)  # (B, H, T, D_h)
+        if use_sketches:
+            sketches = [
+                RACE(D_dim=self.d_out, K=8, L=5, N_M=3, D_out=self.d_out, device=x.device)
+                for _ in range(B)
+            ]
 
-        attn_weights = self.dropout(attn_weights)
-        if torch.isnan(attn_weights).any():
-            with open("nan_log.txt", "a") as f:
-                f.write("Null\n")
-        context_vec = (attn_weights @ values).transpose(1, 2)
-        
+            # Collapse heads for sketching: reshape to [B, T, D]
+            q_flat = queries.transpose(1, 2).contiguous().view(B, num_tokens, self.d_out)
+            k_flat = keys.transpose(1, 2).contiguous().view(B, num_tokens, self.d_out)
+            v_flat = values.transpose(1, 2).contiguous().view(B, num_tokens, self.d_out)
+
+            for b in range(B):
+                sketch = sketches[b]
+                for t in range(num_tokens):
+                    sketch.add(k_flat[b, t], v_flat[b, t])
+                    context = sketch.score(q_flat[b, t])
+                    context_vec[b, :, t, :] = context.view(self.num_heads, self.head_dim)
+
+        else:
+            # Cosine similarity: [B, H, T_q, T_k]
+            cos_sim = queries @ keys.transpose(2, 3)
+            cos_sim = cos_sim.clamp(min=-0.999, max=0.999) 
+            attn_scores = 1 - torch.acos(cos_sim) / torch.pi
+            # Original mask truncated to the number of tokens and converted to boolean
+            mask_bool = self.mask.bool()[:num_tokens, :num_tokens]
+            attn_scores.masked_fill_(mask_bool, 0.0)
+            attn_weights = attn_scores.clamp(min=1e-6).pow(18.0)  # sharpen with γ
+            attn_weights = attn_weights / (attn_weights.sum(dim=-1, keepdim=True) + 1e-6)
+
+            attn_weights = self.dropout(attn_weights)
+            if torch.isnan(attn_weights).any():
+                with open("nan_log.txt", "a") as f:
+                    f.write("Null\n")
+            context_vec = (attn_weights @ values)
+            
         # Combine heads, where self.d_out = self.num_heads * self.head_dim
-        context_vec = context_vec.contiguous().view(b, num_tokens, self.d_out)
+        context_vec = context_vec.transpose(1, 2).contiguous().view(B, num_tokens, self.d_out)
         context_vec = self.out_proj(context_vec) # optional projection
 
         return context_vec
@@ -307,11 +323,11 @@ class RACEBlock(nn.Module):
         self.norm2 = nn.LayerNorm(cfg["emb_dim"])
         self.drop_shortcut = nn.Dropout(cfg["drop_rate"])
 
-    def forward(self, x):
+    def forward(self, x, use_sketches=False):
         # Shortcut connection for attention block
         shortcut = x
         x = self.norm1(x)
-        x = self.att(x)  # Shape [batch_size, num_tokens, emb_size]
+        x = self.att(x, use_sketches)  # Shape [batch_size, num_tokens, emb_size]
         x = self.drop_shortcut(x)
         x = x + shortcut  # Add the original input back
 
@@ -332,21 +348,22 @@ class RACEModel(nn.Module):
         self.pos_emb = nn.Embedding(cfg["context_length"], cfg["emb_dim"])
         self.drop_emb = nn.Dropout(cfg["drop_rate"])
         
-        self.trf_blocks = nn.Sequential(
-            *[RACEBlock(cfg) for _ in range(cfg["n_layers"])])
+        self.trf_blocks = nn.ModuleList(
+            [RACEBlock(cfg) for _ in range(cfg["n_layers"])])
         
         self.final_norm = nn.LayerNorm(cfg["emb_dim"])
         self.out_head = nn.Linear(
             cfg["emb_dim"], cfg["vocab_size"], bias=False
         )
 
-    def forward(self, in_idx):
+    def forward(self, in_idx, use_sketches=False):
         batch_size, seq_len = in_idx.shape
         tok_embeds = self.tok_emb(in_idx)
         pos_embeds = self.pos_emb(torch.arange(seq_len, device=in_idx.device))
         x = tok_embeds + pos_embeds  # Shape [batch_size, num_tokens, emb_size]
         x = self.drop_emb(x)
-        x = self.trf_blocks(x)
+        for block in self.trf_blocks:
+            x = block(x, use_sketches=use_sketches)
         x = self.final_norm(x)
         logits = self.out_head(x)
         return logits
@@ -389,7 +406,7 @@ def calc_loss_acc_loader(data_loader, model, device, num_batches=None):
 
 
 # ------------ TRAINING ------------
-def train_model_simple(model, train_loader, val_loader, optimizer, device, num_epochs, eval_iter, tokenizer):
+def train_model_simple(model, train_loader, val_loader, optimizer, device, num_epochs, eval_iter, tokenizer, gpt=False):
     # Initialize lists to track losses and tokens seen
     train_losses, val_losses = [], []
     train_ppls, val_ppls = [], []
@@ -406,11 +423,8 @@ def train_model_simple(model, train_loader, val_loader, optimizer, device, num_e
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step() # Update model weights using loss gradients
 
-
-        race_sketches = build_race_sketches(model, train_loader, GPT_CONFIG_124M, device="cuda")
-
         train_loss, val_loss, train_acc, val_acc = evaluate_model(
-            model, train_loader, val_loader, device, eval_iter, race_sketches=race_sketches)
+            model, train_loader, val_loader, device, eval_iter, use_sketches=True, gpt=gpt)
         train_ppl = np.exp(train_loss)
         val_ppl = np.exp(val_loss)
         train_losses.append(train_loss)
@@ -419,7 +433,6 @@ def train_model_simple(model, train_loader, val_loader, optimizer, device, num_e
         val_ppls.append(val_ppl)
         train_accs.append(train_acc)
         val_accs.append(val_acc)
-        del race_sketches
 
         print(f"Ep {epoch+1}): "
                 f"Train loss {train_loss:.3f}, Val loss {val_loss:.3f} | Train PPL {train_ppl:.3f}, Val PPL {val_ppl:.3f} | Train acc {train_acc:.3f}, Val acc {val_acc:.3f}")  
@@ -433,12 +446,12 @@ def train_model_simple(model, train_loader, val_loader, optimizer, device, num_e
         "val_acc": val_accs,
     }
 
-def evaluate_model(model, train_loader, val_loader, device, eval_iter, race_sketches=None):
+def evaluate_model(model, train_loader, val_loader, device, eval_iter, use_sketches=False, gpt=False):
     model.eval()
     with torch.no_grad():
         train_loss, train_acc = calc_loss_acc_loader(train_loader, model, device, num_batches=eval_iter)
-        if race_sketches is not None:
-            val_loss, val_acc = calc_loss_acc_loader_race(val_loader, model, race_sketches, device, num_batches=eval_iter)
+        if use_sketches is not False and gpt is False:
+            val_loss, val_acc = calc_loss_acc_loader_race(val_loader, model, device, num_batches=eval_iter)
         else:
             val_loss, val_acc = calc_loss_acc_loader(val_loader, model, device, num_batches=eval_iter)
     model.train()
@@ -464,7 +477,7 @@ def load_small_tinystories():
 
     train_loader = create_dataloader_v1(
         train_data,
-        batch_size=32,
+        batch_size=8,
         max_length=GPT_CONFIG_124M["context_length"],
         stride=GPT_CONFIG_124M["context_length"] // 2,
         drop_last=True,
@@ -474,7 +487,7 @@ def load_small_tinystories():
 
     val_loader = create_dataloader_v1(
         val_data,
-        batch_size=32,
+        batch_size=8,
         max_length=GPT_CONFIG_124M["context_length"],
         stride=GPT_CONFIG_124M["context_length"] // 2,
         drop_last=True,
@@ -503,16 +516,16 @@ def start_experiment():
     num_epochs = 30
 
     # ------------------ TRAINING GPT -----------------
-    # print("Training GPT model...")
-    # torch.manual_seed(123)
-    # model_gpt = GPTModel(GPT_CONFIG_124M)
-    # model_gpt.to(device)
-    # optimizer_gpt = torch.optim.AdamW(model_gpt.parameters(), lr=0.0001, weight_decay=0.1)
+    print("Training GPT model...")
+    torch.manual_seed(123)
+    model_gpt = GPTModel(GPT_CONFIG_124M)
+    model_gpt.to(device)
+    optimizer_gpt = torch.optim.AdamW(model_gpt.parameters(), lr=0.0001, weight_decay=0.1)
 
-    # metrics_gpt = train_model_simple(
-    #     model_gpt, train_loader, val_loader, optimizer_gpt, device,
-    #     num_epochs=num_epochs, eval_iter=None, tokenizer=tokenizer
-    # )
+    metrics_gpt = train_model_simple(
+        model_gpt, train_loader, val_loader, optimizer_gpt, device,
+        num_epochs=num_epochs, eval_iter=None, tokenizer=tokenizer, gpt=True
+    )
   
     # ------------------ TRAINING RACE -----------------
     print("Training RACE model...")
@@ -523,7 +536,7 @@ def start_experiment():
 
     metrics_race = train_model_simple(
         model_race, train_loader, val_loader, optimizer_race, device,
-        num_epochs=num_epochs, eval_iter=None, tokenizer=tokenizer
+        num_epochs=num_epochs, eval_iter=None, tokenizer=tokenizer, gpt=False
     )
 
     plot_comparison_metrics(metrics_race, metrics_gpt, "race.png")

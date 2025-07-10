@@ -10,16 +10,16 @@ import matplotlib.pyplot as plt
 import torch.nn.functional as F
 import numpy as np
 import time
-from race import calc_loss_acc_loader_race, RACE
+from race import calc_loss_acc_loader_race, RACE, RACENumpy
 
 torch.autograd.set_detect_anomaly(True)
 
 # ------------ CONSTANTS ------------
-SAMPLE_SIZE = 4  # Reduced dataset size
+SAMPLE_SIZE = 50  # Reduced dataset size
 
 GPT_CONFIG_124M = {
     "vocab_size": 50257,    # Vocabulary size
-    "context_length": 32, # Context length
+    "context_length": 128, # Context length
     "emb_dim": 512,         # Embedding dimension
     "n_heads": 8,          # Number of attention heads
     "n_layers": 4,         # Number of layers
@@ -185,9 +185,10 @@ class RACEAttention(nn.Module):
         context_vec = torch.zeros_like(queries)  # (B, H, T, D_h)
         if use_sketches:
             sketches = [
-                RACE(D_dim=self.d_out, K=18, L=5, N_M=3, D_out=self.d_out, device=x.device)
+                RACENumpy(D_dim=self.d_out, K=18, L=7, N_M=3, D_out=self.d_out)
                 for _ in range(B)
             ]
+
 
             # Collapse heads for sketching: reshape to [B, T, D]
             q_flat = queries.transpose(1, 2).contiguous().view(B, num_tokens, self.d_out)
@@ -197,10 +198,16 @@ class RACEAttention(nn.Module):
             for b in range(B):
                 sketch = sketches[b]
                 for t in range(num_tokens):
-                    sketch.add(k_flat[b, t], v_flat[b, t])
-                    context = sketch.score(q_flat[b, t])
-                    context_vec[b, :, t, :] = context.view(self.num_heads, self.head_dim)
+                    k_np = k_flat[b, t].detach().cpu().numpy()
+                    v_np = v_flat[b, t].detach().cpu().numpy()
+                    q_np = q_flat[b, t].detach().cpu().numpy()
 
+                    sketch.add(k_np, v_np)
+                    context_np = sketch.score(q_np)  # [D_out] numpy array
+
+                    # Convert back to torch tensor and write to context_vec
+                    context_tensor = torch.tensor(context_np, device=x.device, dtype=x.dtype)
+                    context_vec[b, :, t, :] = context_tensor.view(self.num_heads, self.head_dim)
         else:
             # Cosine similarity: [B, H, T_q, T_k]
             cos_sim = queries @ keys.transpose(2, 3)
@@ -478,7 +485,7 @@ def load_small_tinystories():
 
     train_loader = create_dataloader_v1(
         train_data,
-        batch_size=2,
+        batch_size=4,
         max_length=GPT_CONFIG_124M["context_length"],
         stride=GPT_CONFIG_124M["context_length"] // 2,
         drop_last=True,
@@ -488,7 +495,7 @@ def load_small_tinystories():
 
     val_loader = create_dataloader_v1(
         val_data,
-        batch_size=2,
+        batch_size=4,
         max_length=GPT_CONFIG_124M["context_length"],
         stride=GPT_CONFIG_124M["context_length"] // 2,
         drop_last=True,
@@ -514,7 +521,7 @@ def start_experiment():
     device = "cpu"
     tokenizer = tiktoken.get_encoding("gpt2")
     train_loader, val_loader = load_small_tinystories()
-    num_epochs = 7
+    num_epochs = 20
 
     # ------------------ TRAINING GPT -----------------
     print("Training GPT model...")

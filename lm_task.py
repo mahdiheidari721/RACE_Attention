@@ -1,25 +1,23 @@
 from torch.utils.data import Dataset, DataLoader
 import tiktoken
 import torch
-import torch.nn as nn
-from torch.nn import GELU
 import numpy as np
 from datasets import load_dataset
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-import torch.nn.functional as F
 import numpy as np
 import time
-from race import calc_loss_acc_loader_race, RACE, RACENumpy
+from race import RACEModel
+from gpt import GPTModel, AngularModel
 
 torch.autograd.set_detect_anomaly(True)
 
 # ------------ CONSTANTS ------------
-SAMPLE_SIZE = 50  # Reduced dataset size
+SAMPLE_SIZE = 12  # Reduced dataset size
 
 GPT_CONFIG_124M = {
     "vocab_size": 50257,    # Vocabulary size
-    "context_length": 128, # Context length
+    "context_length": 64, # Context length
     "emb_dim": 512,         # Embedding dimension
     "n_heads": 8,          # Number of attention heads
     "n_layers": 4,         # Number of layers
@@ -76,300 +74,6 @@ def create_dataloader_v1(txt, batch_size, max_length,
 
 # ------------------------------------
 
-# ------------ MODEL DEFINITION ------------
-class MultiHeadAttention(nn.Module):
-    def __init__(self, d_in, d_out, context_length, dropout, num_heads, qkv_bias=False):
-        super().__init__()
-        assert (d_out % num_heads == 0), \
-            "d_out must be divisible by num_heads"
-
-        self.d_out = d_out
-        self.num_heads = num_heads
-        self.head_dim = d_out // num_heads # Reduce the projection dim to match desired output dim
-
-        self.W_query = nn.Linear(d_in, d_out, bias=qkv_bias)
-        self.W_key = nn.Linear(d_in, d_out, bias=qkv_bias)
-        self.W_value = nn.Linear(d_in, d_out, bias=qkv_bias)
-        self.out_proj = nn.Linear(d_out, d_out)  # Linear layer to combine head outputs
-        self.dropout = nn.Dropout(dropout)
-        self.register_buffer(
-            "mask",
-            torch.triu(torch.ones(context_length, context_length),
-                       diagonal=1)
-        )
-
-    def forward(self, x):
-        b, num_tokens, d_in = x.shape
-
-        keys = self.W_key(x) # Shape: (b, num_tokens, d_out)
-        queries = self.W_query(x)
-        values = self.W_value(x)
-
-        # We implicitly split the matrix by adding a `num_heads` dimension
-        # Unroll last dim: (b, num_tokens, d_out) -> (b, num_tokens, num_heads, head_dim)
-        keys = keys.view(b, num_tokens, self.num_heads, self.head_dim) 
-        values = values.view(b, num_tokens, self.num_heads, self.head_dim)
-        queries = queries.view(b, num_tokens, self.num_heads, self.head_dim)
-
-        # Transpose: (b, num_tokens, num_heads, head_dim) -> (b, num_heads, num_tokens, head_dim)
-        keys = keys.transpose(1, 2)
-        queries = queries.transpose(1, 2)
-        values = values.transpose(1, 2)
-
-        # Compute scaled dot-product attention (aka self-attention) with a causal mask
-        attn_scores = queries @ keys.transpose(2, 3)  # Dot product for each head
-
-        # Original mask truncated to the number of tokens and converted to boolean
-        mask_bool = self.mask.bool()[:num_tokens, :num_tokens]
-   
-        # Use the mask to fill attention scores
-        attn_scores.masked_fill_(mask_bool, -torch.inf)
-        
-        attn_weights = torch.softmax(attn_scores / keys.shape[-1]**0.5, dim=-1)
-        attn_weights = self.dropout(attn_weights)
-
-        # Shape: (b, num_tokens, num_heads, head_dim)
-        context_vec = (attn_weights @ values).transpose(1, 2) 
-        
-        # Combine heads, where self.d_out = self.num_heads * self.head_dim
-        context_vec = context_vec.contiguous().view(b, num_tokens, self.d_out)
-        context_vec = self.out_proj(context_vec) # optional projection
-
-        return context_vec
-
-class RACEAttention(nn.Module):
-    def __init__(self, d_in, d_out, context_length, dropout, num_heads, qkv_bias=False):
-        super().__init__()
-        assert (d_out % num_heads == 0), \
-            "d_out must be divisible by num_heads"
-
-        self.d_out = d_out
-        self.num_heads = num_heads
-        self.head_dim = d_out // num_heads # Reduce the projection dim to match desired output dim
-        self.norm = nn.LayerNorm(d_in)
-
-        self.W_query = nn.Linear(d_in, d_out, bias=qkv_bias)
-        self.W_key = nn.Linear(d_in, d_out, bias=qkv_bias)
-        self.W_value = nn.Linear(d_in, d_out, bias=qkv_bias)
-        self.out_proj = nn.Linear(d_out, d_out)  # Linear layer to combine head outputs
-        self.dropout = nn.Dropout(dropout)
-
-        self.register_buffer(
-            "mask",
-            torch.triu(torch.ones(context_length, context_length),
-                       diagonal=1)
-        )
-
-    def forward(self, x, use_sketches=False):
-        B, num_tokens, d_in = x.shape
-
-        keys = self.W_key(x) # Shape: (b, num_tokens, d_out)
-        queries = self.W_query(x)
-        values = self.W_value(x)
-
-        # We implicitly split the matrix by adding a `num_heads` dimension
-        # Unroll last dim: (b, num_tokens, d_out) -> (b, num_tokens, num_heads, head_dim)
-        keys = keys.view(B, num_tokens, self.num_heads, self.head_dim) 
-        values = values.view(B, num_tokens, self.num_heads, self.head_dim)
-        queries = queries.view(B, num_tokens, self.num_heads, self.head_dim)
-
-        # Transpose: (b, num_tokens, num_heads, head_dim) -> (b, num_heads, num_tokens, head_dim)
-        keys = keys.transpose(1, 2)
-        queries = queries.transpose(1, 2)
-        values = values.transpose(1, 2)
-
-        # Normalize for cosine similarity
-        queries = F.normalize(queries, dim=-1, p=2, eps=1e-6)
-        keys = F.normalize(keys, dim=-1, p=2, eps=1e-6)
-
-        context_vec = torch.zeros_like(queries)  # (B, H, T, D_h)
-        if use_sketches:
-            sketches = [
-                RACENumpy(D_dim=self.d_out, K=18, L=7, N_M=3, D_out=self.d_out)
-                for _ in range(B)
-            ]
-
-
-            # Collapse heads for sketching: reshape to [B, T, D]
-            q_flat = queries.transpose(1, 2).contiguous().view(B, num_tokens, self.d_out)
-            k_flat = keys.transpose(1, 2).contiguous().view(B, num_tokens, self.d_out)
-            v_flat = values.transpose(1, 2).contiguous().view(B, num_tokens, self.d_out)
-
-            for b in range(B):
-                sketch = sketches[b]
-                for t in range(num_tokens):
-                    k_np = k_flat[b, t].detach().cpu().numpy()
-                    v_np = v_flat[b, t].detach().cpu().numpy()
-                    q_np = q_flat[b, t].detach().cpu().numpy()
-
-                    sketch.add(k_np, v_np)
-                    context_np = sketch.score(q_np)  # [D_out] numpy array
-
-                    # Convert back to torch tensor and write to context_vec
-                    context_tensor = torch.tensor(context_np, device=x.device, dtype=x.dtype)
-                    context_vec[b, :, t, :] = context_tensor.view(self.num_heads, self.head_dim)
-        else:
-            # Cosine similarity: [B, H, T_q, T_k]
-            cos_sim = queries @ keys.transpose(2, 3)
-            cos_sim = cos_sim.clamp(min=-0.999, max=0.999) 
-            attn_scores = 1 - torch.acos(cos_sim) / torch.pi
-            # Original mask truncated to the number of tokens and converted to boolean
-            mask_bool = self.mask.bool()[:num_tokens, :num_tokens]
-            attn_scores.masked_fill_(mask_bool, 0.0)
-            attn_weights = attn_scores.clamp(min=1e-6).pow(18.0)  # sharpen with γ
-            attn_weights = attn_weights / (attn_weights.sum(dim=-1, keepdim=True) + 1e-6)
-
-            attn_weights = self.dropout(attn_weights)
-            if torch.isnan(attn_weights).any():
-                with open("nan_log.txt", "a") as f:
-                    f.write("Null\n")
-            context_vec = (attn_weights @ values)
-            
-        # Combine heads, where self.d_out = self.num_heads * self.head_dim
-        context_vec = context_vec.transpose(1, 2).contiguous().view(B, num_tokens, self.d_out)
-        context_vec = self.out_proj(context_vec) # optional projection
-
-        return context_vec
-
-    def get_qkv(self, x):
-        # x: [B, T, D]
-        b, num_tokens, _ = x.shape
-        keys = self.W_key(x)
-        queries = self.W_query(x)
-        values = self.W_value(x)
-
-        return queries, keys, values
-
-class TransformerBlock(nn.Module):
-    def __init__(self, cfg):
-        super().__init__()
-        self.att = MultiHeadAttention(
-            d_in=cfg["emb_dim"],
-            d_out=cfg["emb_dim"],
-            context_length=cfg["context_length"],
-            num_heads=cfg["n_heads"], 
-            dropout=cfg["drop_rate"],
-            qkv_bias=cfg["qkv_bias"])
-        self.ff = nn.Sequential(
-            nn.Linear(cfg["emb_dim"], 4 * cfg["emb_dim"]), ## Expansion
-            GELU(), ## Activation
-            nn.Linear(4 * cfg["emb_dim"], cfg["emb_dim"]), ## Contraction
-        )
-        self.norm1 = nn.LayerNorm(cfg["emb_dim"])
-        self.norm2 = nn.LayerNorm(cfg["emb_dim"])
-        self.drop_shortcut = nn.Dropout(cfg["drop_rate"])
-
-    def forward(self, x):
-        # Shortcut connection for attention block
-        shortcut = x
-        x = self.norm1(x)
-        x = self.att(x)  # Shape [batch_size, num_tokens, emb_size]
-        x = self.drop_shortcut(x)
-        x = x + shortcut  # Add the original input back
-
-        # Shortcut connection for feed forward block
-        shortcut = x
-        x = self.norm2(x)
-        x = self.ff(x)
-        # 2*4*768
-        x = self.drop_shortcut(x)
-        x = x + shortcut  # Add the original input back
-
-        return x
-        # 2*4*768
-
-class GPTModel(nn.Module):
-    def __init__(self, cfg):
-        super().__init__()
-        self.tok_emb = nn.Embedding(cfg["vocab_size"], cfg["emb_dim"])
-        self.pos_emb = nn.Embedding(cfg["context_length"], cfg["emb_dim"])
-        self.drop_emb = nn.Dropout(cfg["drop_rate"])
-        
-        self.trf_blocks = nn.Sequential(
-            *[TransformerBlock(cfg) for _ in range(cfg["n_layers"])])
-        
-        self.final_norm = nn.LayerNorm(cfg["emb_dim"])
-        self.out_head = nn.Linear(
-            cfg["emb_dim"], cfg["vocab_size"], bias=False
-        )
-
-    def forward(self, in_idx):
-        batch_size, seq_len = in_idx.shape
-        tok_embeds = self.tok_emb(in_idx)
-        pos_embeds = self.pos_emb(torch.arange(seq_len, device=in_idx.device))
-        x = tok_embeds + pos_embeds  # Shape [batch_size, num_tokens, emb_size]
-        x = self.drop_emb(x)
-        x = self.trf_blocks(x)
-        x = self.final_norm(x)
-        logits = self.out_head(x)
-        return logits
-
-
-class RACEBlock(nn.Module):
-    def __init__(self, cfg):
-        super().__init__()
-        self.att = RACEAttention(
-            d_in=cfg["emb_dim"],
-            d_out=cfg["emb_dim"],
-            context_length=cfg["context_length"],
-            num_heads=cfg["n_heads"], 
-            dropout=cfg["drop_rate"],
-            qkv_bias=cfg["qkv_bias"])
-        self.ff = nn.Sequential(
-            nn.Linear(cfg["emb_dim"], 4 * cfg["emb_dim"]), ## Expansion
-            GELU(), ## Activation
-            nn.Linear(4 * cfg["emb_dim"], cfg["emb_dim"]), ## Contraction
-        )
-        self.norm1 = nn.LayerNorm(cfg["emb_dim"])
-        self.norm2 = nn.LayerNorm(cfg["emb_dim"])
-        self.drop_shortcut = nn.Dropout(cfg["drop_rate"])
-
-    def forward(self, x, use_sketches=False):
-        # Shortcut connection for attention block
-        shortcut = x
-        x = self.norm1(x)
-        x = self.att(x, use_sketches)  # Shape [batch_size, num_tokens, emb_size]
-        x = self.drop_shortcut(x)
-        x = x + shortcut  # Add the original input back
-
-        # Shortcut connection for feed forward block
-        shortcut = x
-        x = self.norm2(x)
-        x = self.ff(x)
-        # 2*4*768
-        x = self.drop_shortcut(x)
-        x = x + shortcut  # Add the original input back
-
-        return x
-
-class RACEModel(nn.Module):
-    def __init__(self, cfg):
-        super().__init__()
-        self.tok_emb = nn.Embedding(cfg["vocab_size"], cfg["emb_dim"])
-        self.pos_emb = nn.Embedding(cfg["context_length"], cfg["emb_dim"])
-        self.drop_emb = nn.Dropout(cfg["drop_rate"])
-        
-        self.trf_blocks = nn.ModuleList(
-            [RACEBlock(cfg) for _ in range(cfg["n_layers"])])
-        
-        self.final_norm = nn.LayerNorm(cfg["emb_dim"])
-        self.out_head = nn.Linear(
-            cfg["emb_dim"], cfg["vocab_size"], bias=False
-        )
-
-    def forward(self, in_idx, use_sketches=False):
-        batch_size, seq_len = in_idx.shape
-        tok_embeds = self.tok_emb(in_idx)
-        pos_embeds = self.pos_emb(torch.arange(seq_len, device=in_idx.device))
-        x = tok_embeds + pos_embeds  # Shape [batch_size, num_tokens, emb_size]
-        x = self.drop_emb(x)
-        for block in self.trf_blocks:
-            x = block(x, use_sketches=use_sketches)
-        x = self.final_norm(x)
-        logits = self.out_head(x)
-        return logits
-# ------------------------------------
-
 # ------------ EXAMPLE DATA ------------
 
 def calc_loss_acc_batch(input_batch, target_batch, model, device):
@@ -408,7 +112,7 @@ def calc_loss_acc_loader(data_loader, model, device, num_batches=None):
 
 
 # ------------ TRAINING ------------
-def train_model_simple(model, train_loader, val_loader, optimizer, device, num_epochs, eval_iter, gpt=False):
+def train_model_simple(model, train_loader, val_loader, optimizer, device, num_epochs, eval_iter):
     # Initialize lists to track losses and tokens seen
     train_losses, val_losses = [], []
     train_ppls, val_ppls = [], []
@@ -426,7 +130,7 @@ def train_model_simple(model, train_loader, val_loader, optimizer, device, num_e
             optimizer.step() # Update model weights using loss gradients
 
         train_loss, val_loss, train_acc, val_acc = evaluate_model(
-            model, train_loader, val_loader, device, eval_iter, use_sketches=True, gpt=gpt)
+            model, train_loader, val_loader, device, eval_iter)
         train_ppl = np.exp(train_loss)
         val_ppl = np.exp(val_loss)
         train_losses.append(train_loss)
@@ -448,21 +152,12 @@ def train_model_simple(model, train_loader, val_loader, optimizer, device, num_e
         "val_acc": val_accs,
     }
 
-def evaluate_model(model, train_loader, val_loader, device, eval_iter, use_sketches=False, gpt=False):
+def evaluate_model(model, train_loader, val_loader, device, eval_iter):
     model.eval()
     with torch.no_grad():
         train_loss, train_acc = calc_loss_acc_loader(train_loader, model, device, num_batches=eval_iter)
-        start_val = time.time()
-        if use_sketches is True and gpt is False:
-            val_loss, val_acc = calc_loss_acc_loader_race(val_loader, model, device, num_batches=eval_iter)
-            method = "RACE"
-        else:
-            val_loss, val_acc = calc_loss_acc_loader(val_loader, model, device, num_batches=eval_iter)
-            method = "Standard"
-        end_val = time.time()
-        val_time = end_val - start_val
+        val_loss, val_acc = calc_loss_acc_loader(val_loader, model, device, num_batches=eval_iter)
     model.train()
-    print(f"🕒 Val eval time ({method}): {val_time:.2f}s")
     return train_loss, val_loss, train_acc, val_acc
 
 def load_small_tinystories():
@@ -532,7 +227,7 @@ def start_experiment():
 
     metrics_gpt = train_model_simple(
         model_gpt, train_loader, val_loader, optimizer_gpt, device,
-        num_epochs=num_epochs, eval_iter=None, gpt=True
+        num_epochs=num_epochs, eval_iter=None
     )
   
     # ------------------ TRAINING RACE -----------------
@@ -544,9 +239,21 @@ def start_experiment():
 
     metrics_race = train_model_simple(
         model_race, train_loader, val_loader, optimizer_race, device,
-        num_epochs=num_epochs, eval_iter=None, gpt=False
+        num_epochs=num_epochs, eval_iter=None
     )
 
+    # ------------------ Training Angular ---------------
+    print("Training Angular model...")
+    torch.manual_seed(123)
+    model_angular = AngularModel(GPT_CONFIG_124M)
+    model_angular.to(device)
+    optimizer_angular = torch.optim.AdamW(model_angular.parameters(), lr=0.0001, weight_decay=0.1)
+
+    metrics_angular = train_model_simple(
+        model_angular, train_loader, val_loader, optimizer_angular, device,
+        num_epochs=num_epochs, eval_iter=None
+    )
+    
     plot_comparison_metrics(metrics_race, metrics_gpt, "race.png")
 
 def plot_comparison_metrics(metrics_race, metrics_gpt, save_path):

@@ -1,12 +1,5 @@
+import torch
 import numpy as np
-import torch
-from torch.utils.data import Dataset, DataLoader
-import torch.nn as nn
-from torch.nn import GELU
-from datasets import load_dataset
-from tqdm import tqdm
-import torch.nn.functional as F
-import torch
 
 class ACE:
     def __init__(self, D_dim, K, L, device='cpu', seed=None):
@@ -93,6 +86,7 @@ class RACE:
         self.device = device
         self.L = L
         self.hash_size = 2 ** K
+        self.K = K
 
         self.aces = [
             ACE(D_dim, K=K, L=L, device=device, seed=(seed if seed is not None else None))
@@ -151,11 +145,98 @@ class RACE:
         per_ace_estimates = torch.stack(per_ace_estimates, dim=0)  # [N_M, D_out]
         return per_ace_estimates.median(dim=0).values  # [D_out]
 
+
     def clear(self):
         for ace in self.aces:
             ace.clear()
         self.ases.zero_()
 
+
+class ACENumpy:
+    def __init__(self, D_dim, K, L, seed=None):
+        self.K = K
+        self.L = L
+        self.D_dim = D_dim
+        self.hash_size = 2 ** K
+
+        if seed is not None:
+            np.random.seed(seed)
+
+        self.hash_planes = np.random.randn(L, K, D_dim).astype(np.float32)  # [L, K, D]
+        self.arrays = np.zeros((L, self.hash_size), dtype=np.int32)
+
+        self.n = 0
+        self.mu = 0.0
+
+    def hash(self, x):
+        projections = np.einsum('lkd,d->lk', self.hash_planes, x)  # [L, K]
+        bits = (projections > 0).astype(np.int32)
+        powers = (2 ** np.arange(self.K)).astype(np.int32)
+        return np.sum(bits * powers, axis=-1)  # [L]
+
+    def add(self, x):
+        indices = self.hash(x)  # [L]
+        incr = 0.0
+        for j in range(self.L):
+            h = indices[j]
+            self.arrays[j, h] += 1
+            incr += (2 * self.arrays[j, h] + 1) / self.L
+        self.mu = (self.n * self.mu + incr) / (self.n + 1)
+        self.n += 1
+
+    def score(self, q):
+        indices = self.hash(q)  # [L]
+        counts = np.array([self.arrays[j, indices[j]] for j in range(self.L)], dtype=np.float32)
+        return counts.mean()
+
+    def is_anomaly(self, q, alpha):
+        return self.score(q) < self.mu - alpha
+
+    def clear(self):
+        self.arrays.fill(0)
+        self.mu = 0.0
+        self.n = 0
+
+
+class RACENumpy:
+    def __init__(self, D_dim, K, L, N_M, D_out, seed=None):
+        self.N_M = N_M
+        self.D_out = D_out
+        self.L = L
+        self.K = K
+        self.hash_size = 2 ** K
+
+        self.aces = [ACENumpy(D_dim, K=K, L=L, seed=seed) for _ in range(N_M)]
+        self.ases = np.zeros((N_M, L, self.hash_size, D_out), dtype=np.float32)
+
+    def add(self, x, v):
+        for m, ace in enumerate(self.aces):
+            indices = ace.hash(x)  # [L]
+            for l in range(self.L):
+                h = indices[l]
+                ace.arrays[l, h] += 1
+                self.ases[m, l, h] += v
+
+    def score(self, q):
+        estimates = []
+        for m, ace in enumerate(self.aces):
+            indices = ace.hash(q)  # [L]
+            v_sum = np.zeros(self.D_out, dtype=np.float32)
+            count = 0
+            for l in range(self.L):
+                h = indices[l]
+                count += ace.arrays[l, h]
+                v_sum += self.ases[m, l, h]
+            avg_v = v_sum / (count + 1e-6)
+            estimates.append(avg_v)
+
+        estimates = np.stack(estimates, axis=0)  # [N_M, D_out]
+        return np.median(estimates, axis=0)  # [D_out]
+
+    def clear(self):
+        for ace in self.aces:
+            ace.clear()
+        self.ases.fill(0)
 
 def calc_loss_acc_batch_race(input_batch, target_batch, model, device):
     input_batch, target_batch = input_batch.to(device), target_batch.to(device)
@@ -171,10 +252,21 @@ def calc_loss_acc_batch_race(input_batch, target_batch, model, device):
 def calc_loss_acc_loader_race(data_loader, model, device, num_batches=None):
     total_loss = 0.0
     total_acc = 0.0
-    num_batches = num_batches or len(data_loader)
+
+    if len(data_loader) == 0:
+        print("Data loader is empty for loss calculation.")
+        return float("nan"), float("nan")
+    elif num_batches is None:
+        num_batches = len(data_loader)
+    else:
+        # Reduce the number of batches to match the total number of batches in the data loader
+        # if num_batches exceeds the number of batches in the data loader
+        num_batches = min(num_batches, len(data_loader))
     for i, (input_batch, target_batch) in enumerate(data_loader):
-        if i >= num_batches: break
-        loss, acc = calc_loss_acc_batch_race(input_batch, target_batch, model, device)
-        total_loss += loss.item()
-        total_acc += acc
+        if i < num_batches:
+            loss, acc = calc_loss_acc_batch_race(input_batch, target_batch, model, device)
+            total_loss += loss.item()
+            total_acc += acc
+        else:
+            break
     return total_loss / num_batches, total_acc / num_batches

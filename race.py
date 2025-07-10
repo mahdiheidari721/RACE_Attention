@@ -263,7 +263,7 @@ class RACEModel(nn.Module):
         )
 
     def forward(self, in_idx):
-        batch_size, seq_len = in_idx.shape
+        _ , seq_len = in_idx.shape
         tok_embeds = self.tok_emb(in_idx)
         pos_embeds = self.pos_emb(torch.arange(seq_len, device=in_idx.device))
         x = tok_embeds + pos_embeds  # Shape [batch_size, num_tokens, emb_size]
@@ -289,12 +289,6 @@ class RACEAttention(nn.Module):
         self.out_proj = nn.Linear(d_out, d_out)  # Linear layer to combine head outputs
         self.dropout = nn.Dropout(dropout)
 
-        self.register_buffer(
-            "mask",
-            torch.triu(torch.ones(context_length, context_length),
-                       diagonal=1)
-        )
-
     def forward(self, x):
         B, num_tokens, d_in = x.shape
 
@@ -312,10 +306,6 @@ class RACEAttention(nn.Module):
         keys = keys.transpose(1, 2)
         queries = queries.transpose(1, 2)
         values = values.transpose(1, 2)
-
-        # Normalize for cosine similarity
-        queries = F.normalize(queries, dim=-1, p=2, eps=1e-6)
-        keys = F.normalize(keys, dim=-1, p=2, eps=1e-6)
 
         context_vec = torch.zeros_like(queries)  # (B, H, T, D_h)
         sketches = [

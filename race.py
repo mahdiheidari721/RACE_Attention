@@ -1,6 +1,10 @@
 import torch
 import numpy as np
+from torch import nn
+from torch.nn import GELU
+import torch.nn.functional as F
 
+# ------------ Tensor Implementation ------------
 class ACE:
     def __init__(self, D_dim, K, L, device='cpu', seed=None):
         self.K = K
@@ -151,7 +155,9 @@ class RACE:
             ace.clear()
         self.ases.zero_()
 
+# ----------------------------------------------------------
 
+# ------------------ NUMPY Implementation ------------------
 class ACENumpy:
     def __init__(self, D_dim, K, L, seed=None):
         self.K = K
@@ -238,35 +244,145 @@ class RACENumpy:
             ace.clear()
         self.ases.fill(0)
 
-def calc_loss_acc_batch_race(input_batch, target_batch, model, device):
-    input_batch, target_batch = input_batch.to(device), target_batch.to(device)
-    logits = model(input_batch, use_sketches=True)  # Forward pass with sketches
-    loss = torch.nn.functional.cross_entropy(logits.flatten(0, 1), target_batch.flatten())
-    # Compute accuracy
-    with torch.no_grad():
-        predictions = logits.argmax(dim=-1)  # Get indices of max logit
-        correct = (predictions == target_batch).float()
-        acc = correct.mean().item()  # Convert to scalar float
-    return loss, acc
+# ----------------------------------------------------------
 
-def calc_loss_acc_loader_race(data_loader, model, device, num_batches=None):
-    total_loss = 0.0
-    total_acc = 0.0
+# ------------------ RACE Model ----------------------------
+class RACEModel(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+        self.tok_emb = nn.Embedding(cfg["vocab_size"], cfg["emb_dim"])
+        self.pos_emb = nn.Embedding(cfg["context_length"], cfg["emb_dim"])
+        self.drop_emb = nn.Dropout(cfg["drop_rate"])
+        
+        self.trf_blocks = nn.Sequential(
+            *[RACEBlock(cfg) for _ in range(cfg["n_layers"])])
+        
+        self.final_norm = nn.LayerNorm(cfg["emb_dim"])
+        self.out_head = nn.Linear(
+            cfg["emb_dim"], cfg["vocab_size"], bias=False
+        )
 
-    if len(data_loader) == 0:
-        print("Data loader is empty for loss calculation.")
-        return float("nan"), float("nan")
-    elif num_batches is None:
-        num_batches = len(data_loader)
-    else:
-        # Reduce the number of batches to match the total number of batches in the data loader
-        # if num_batches exceeds the number of batches in the data loader
-        num_batches = min(num_batches, len(data_loader))
-    for i, (input_batch, target_batch) in enumerate(data_loader):
-        if i < num_batches:
-            loss, acc = calc_loss_acc_batch_race(input_batch, target_batch, model, device)
-            total_loss += loss.item()
-            total_acc += acc
-        else:
-            break
-    return total_loss / num_batches, total_acc / num_batches
+    def forward(self, in_idx):
+        batch_size, seq_len = in_idx.shape
+        tok_embeds = self.tok_emb(in_idx)
+        pos_embeds = self.pos_emb(torch.arange(seq_len, device=in_idx.device))
+        x = tok_embeds + pos_embeds  # Shape [batch_size, num_tokens, emb_size]
+        x = self.drop_emb(x)
+        x = self.trf_blocks(x)
+        x = self.final_norm(x)
+        logits = self.out_head(x)
+        return logits
+
+class RACEAttention(nn.Module):
+    def __init__(self, d_in, d_out, context_length, dropout, num_heads, qkv_bias=False):
+        super().__init__()
+        assert (d_out % num_heads == 0), \
+            "d_out must be divisible by num_heads"
+
+        self.d_out = d_out
+        self.num_heads = num_heads
+        self.head_dim = d_out // num_heads # Reduce the projection dim to match desired output dim
+
+        self.W_query = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.W_key = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.W_value = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.out_proj = nn.Linear(d_out, d_out)  # Linear layer to combine head outputs
+        self.dropout = nn.Dropout(dropout)
+
+        self.register_buffer(
+            "mask",
+            torch.triu(torch.ones(context_length, context_length),
+                       diagonal=1)
+        )
+
+    def forward(self, x):
+        B, num_tokens, d_in = x.shape
+
+        keys = self.W_key(x) # Shape: (b, num_tokens, d_out)
+        queries = self.W_query(x)
+        values = self.W_value(x)
+
+        # We implicitly split the matrix by adding a `num_heads` dimension
+        # Unroll last dim: (b, num_tokens, d_out) -> (b, num_tokens, num_heads, head_dim)
+        keys = keys.view(B, num_tokens, self.num_heads, self.head_dim) 
+        values = values.view(B, num_tokens, self.num_heads, self.head_dim)
+        queries = queries.view(B, num_tokens, self.num_heads, self.head_dim)
+
+        # Transpose: (b, num_tokens, num_heads, head_dim) -> (b, num_heads, num_tokens, head_dim)
+        keys = keys.transpose(1, 2)
+        queries = queries.transpose(1, 2)
+        values = values.transpose(1, 2)
+
+        # Normalize for cosine similarity
+        queries = F.normalize(queries, dim=-1, p=2, eps=1e-6)
+        keys = F.normalize(keys, dim=-1, p=2, eps=1e-6)
+
+        context_vec = torch.zeros_like(queries)  # (B, H, T, D_h)
+        sketches = [
+            RACENumpy(D_dim=self.d_out, K=18, L=8, N_M=10, D_out=self.d_out)
+            for _ in range(B)
+        ]
+
+        # Collapse heads for sketching: reshape to [B, T, D]
+        q_flat = queries.transpose(1, 2).contiguous().view(B, num_tokens, self.d_out)
+        k_flat = keys.transpose(1, 2).contiguous().view(B, num_tokens, self.d_out)
+        v_flat = values.transpose(1, 2).contiguous().view(B, num_tokens, self.d_out)
+
+        k_flat_np = k_flat.detach().numpy()  # shape [B, T, D]
+        v_flat_np = v_flat.detach().numpy()
+        q_flat_np = q_flat.detach().numpy()
+        for b in range(B):
+            sketch = sketches[b]
+            for t in range(num_tokens):
+                k_np = k_flat_np[b, t]
+                v_np = v_flat_np[b, t]
+                q_np = q_flat_np[b, t]
+
+                sketch.add(k_np, v_np)
+                context_np = sketch.score(q_np)  # [D_out] numpy array
+
+                # Convert back to torch tensor and write to context_vec
+                context_tensor = torch.tensor(context_np, device=x.device, dtype=x.dtype)
+                context_vec[b, :, t, :] = context_tensor.view(self.num_heads, self.head_dim)
+            
+        # Combine heads, where self.d_out = self.num_heads * self.head_dim
+        context_vec = context_vec.transpose(1, 2).contiguous().view(B, num_tokens, self.d_out)
+        context_vec = self.out_proj(context_vec) # optional projection
+        return context_vec
+    
+class RACEBlock(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+        self.att = RACEAttention(
+            d_in=cfg["emb_dim"],
+            d_out=cfg["emb_dim"],
+            context_length=cfg["context_length"],
+            num_heads=cfg["n_heads"], 
+            dropout=cfg["drop_rate"],
+            qkv_bias=cfg["qkv_bias"])
+        self.ff = nn.Sequential(
+            nn.Linear(cfg["emb_dim"], 4 * cfg["emb_dim"]), ## Expansion
+            GELU(), ## Activation
+            nn.Linear(4 * cfg["emb_dim"], cfg["emb_dim"]), ## Contraction
+        )
+        self.norm1 = nn.LayerNorm(cfg["emb_dim"])
+        self.norm2 = nn.LayerNorm(cfg["emb_dim"])
+        self.drop_shortcut = nn.Dropout(cfg["drop_rate"])
+
+    def forward(self, x):
+        # Shortcut connection for attention block
+        shortcut = x
+        x = self.norm1(x)
+        x = self.att(x)  # Shape [batch_size, num_tokens, emb_size]
+        x = self.drop_shortcut(x)
+        x = x + shortcut  # Add the original input back
+
+        # Shortcut connection for feed forward block
+        shortcut = x
+        x = self.norm2(x)
+        x = self.ff(x)
+        x = self.drop_shortcut(x)
+        x = x + shortcut  # Add the original input back
+
+        return x
+# -------------------------------------------------------------------

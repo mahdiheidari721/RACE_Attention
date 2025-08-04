@@ -9,23 +9,22 @@ from tqdm import tqdm
 import torch.nn.functional as F
 from transformers import BertTokenizerFast, DataCollatorForLanguageModeling
 import os
+import matplotlib.pyplot as plt
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-torch.set_float32_matmul_precision('high')
-
 # ------------ CONSTANTS ------------
-SAMPLE_SIZE = 10000  # Reduced dataset size
+SAMPLE_SIZE = 5000  # Reduced dataset size
 
 BERT_CONFIG = {
     "vocab_size": 30522,    # Vocabulary size
     "context_length": 128, # Context length
-    "emb_dim": 312,         # Embedding dimension
-    "n_heads": 8,          # Number of attention heads
-    "n_layers": 4,         # Number of layers
+    "emb_dim": 256,         # Embedding dimension
+    "n_heads": 2,          # Number of attention heads
+    "n_layers": 1,         # Number of layers
     "drop_rate": 0.1,       # Dropout rate
     "qkv_bias": False,       # Query-Key-Value bias
     "K": 3,
-    "L": 6,
+    "L": 2,
     "M": 2
 }
 
@@ -46,12 +45,15 @@ class MultiHeadAttention(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
-        B, T, _ = x.shape
+        B, T, _ = x.shape   
         Q = self.W_query(x).view(B, T, self.num_heads, self.head_dim).transpose(1,2)
         K = self.W_key(x).view(B, T, self.num_heads, self.head_dim).transpose(1,2)
         V = self.W_value(x).view(B, T, self.num_heads, self.head_dim).transpose(1,2)
 
-        out = F.scaled_dot_product_attention(Q, K, V, is_causal=False)  # (B, H, T, head_dim)
+        # out = F.scaled_dot_product_attention(Q, K, V, is_causal=False)  # (B, H, T, head_dim)
+        attn = torch.softmax((Q @ K.transpose(-2,-1)) / math.sqrt(self.head_dim), dim=-1)
+        attn = self.dropout(attn)
+        out = attn @ V
         out = out.transpose(1, 2).contiguous().view(B, T, -1)
         return self.out_proj(out)
     
@@ -156,10 +158,13 @@ class BatchedACE(nn.Module):
         corners = torch.tensor(list(itertools.product([-1.,+1.],repeat=K)))
         self.register_buffer("protos_T", corners.T)                  # [K, R]
 
+        self.logit_temp = nn.Parameter(torch.log(torch.tensor(1.0)))
+
     def forward(self, Kh, Vh, Qh):
         # Kh,Vh,Qh: [M, B, T, H, d_k]
         M,B,T,H,dk = Kh.shape
         assert M==self.M and dk==self.d_k
+        temp = self.logit_temp.exp().clamp(1e-2, 10.0)
 
         # 1) flatten out to a big batch for keys:
         #    flat_K: [M*B*T*H, d_k]
@@ -171,7 +176,7 @@ class BatchedACE(nn.Module):
 
         # 2) compute soft‑hash logits & probs:
         #    [M*B*T*H*L, K] @ [K, R] → [M*B*T*H*L, R]
-        logitsK = (projK.tanh().div(dk**0.5)
+        logitsK = (projK.tanh().div(temp)
                         .reshape(-1, self.K)
                    @ self.protos_T
                   ).view(M, B, T, H, self.L, self.R)
@@ -195,7 +200,7 @@ class BatchedACE(nn.Module):
         #    projQ → probsQ exactly like projK/logitsK/probsK
         flat_Q = Qh.reshape(-1, dk)
         projQ  = (flat_Q @ self.planes_T).view(-1, self.L, self.K)
-        logitsQ= ((projQ.tanh().div(dk**0.5)
+        logitsQ= ((projQ.tanh().div(temp)
                       .reshape(-1, self.K)
                    @ self.protos_T
                   ).view(M, B, T, H, self.L, self.R))
@@ -240,8 +245,9 @@ class RACEAttention(nn.Module):
         return self.drop(self.o(out))
 
 
+
 class RACEBlock(nn.Module):
-    def __init__(self, cfg, device='cuda'):
+    def __init__(self, cfg, device='cpu'):
         super().__init__()
         self.att   = RACEAttention(
             d=cfg["emb_dim"],
@@ -273,7 +279,7 @@ class RACEBlock(nn.Module):
 # ------------ MODEL DEFINITION -----------
 
 class LMModel(nn.Module):
-    def __init__(self, cfg, attn_type="gpt", device="cuda"):
+    def __init__(self, cfg, attn_type="gpt", device="cpu"):
         """
         attn_type ∈ {"gpt","angular","race"}
         """
@@ -345,8 +351,8 @@ def load_small_tinystories():
     train_dataset = grouped.select(range(train_size))
     val_dataset = grouped.select(range(train_size, len(grouped)))
 
-    train_loader = DataLoader(train_dataset, batch_size=4, shuffle=False, collate_fn=tuple_collate_fn)
-    val_loader = DataLoader(val_dataset, batch_size=4, shuffle=False, collate_fn=tuple_collate_fn)
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=False, collate_fn=tuple_collate_fn)
+    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, collate_fn=tuple_collate_fn)
 
     return train_loader, val_loader
 
@@ -450,15 +456,16 @@ def train_model_simple(model, train_loader, val_loader, optimizer, device, num_e
 
 
 def start_experiment():
-    device = "cuda:2"
+    device = "cpu"
     train_loader, val_loader = load_small_tinystories()
-    num_epochs = 20
+    print(len(train_loader), len(val_loader))
+    num_epochs = 3
     # ------------------ TRAINING MODELS -----------------
     # print("Training BERT model...")
     # torch.manual_seed(123)
-    # model_bert = torch.compile(LMModel(BERT_CONFIG, "bert"))
+    # model_bert = LMModel(BERT_CONFIG, "bert")
     # model_bert.to(device)
-    # optimizer_bert = torch.optim.AdamW(model_bert.parameters(), lr=0.0001, weight_decay=0.1)
+    # optimizer_bert = torch.optim.AdamW(model_bert.parameters(), lr=1e-5, weight_decay=5e-05)
 
     # metrics_bert = train_model_simple(
     #     model_bert, train_loader, val_loader, optimizer_bert, device,
@@ -466,15 +473,15 @@ def start_experiment():
     
     print("Training RACE model...")
     torch.manual_seed(123)
-    model_race = torch.compile(LMModel(BERT_CONFIG, "race"))
+    model_race = LMModel(BERT_CONFIG, "race")
     model_race.to(device)
-    optimizer_race = torch.optim.AdamW(model_race.parameters(), lr=0.0001, weight_decay=0.1)
+    optimizer_race = torch.optim.AdamW(model_race.parameters(), lr=1e-5, weight_decay=5e-05)
 
     metrics_race = train_model_simple(
         model_race, train_loader, val_loader, optimizer_race, device,
         num_epochs=num_epochs)
     
-
+    plot_comparison_metrics(metrics_race, metrics_bert, f"mlm2_{BERT_CONFIG['context_length']}.png")
     # print("Training Angular model...")
     # torch.manual_seed(123)
     # model_angular = torch.compile(LMModel(BERT_CONFIG, "angular"))
@@ -486,6 +493,51 @@ def start_experiment():
     #     num_epochs=num_epochs)
     
 
+def plot_comparison_metrics(metrics_race, metrics_bert, save_path, seq_len=BERT_CONFIG["context_length"], K=BERT_CONFIG["K"], L=BERT_CONFIG["L"], M=BERT_CONFIG["M"]):
+    epochs = range(1, len(metrics_race["train_loss"]) + 1)
 
+    fig, axes = plt.subplots(1, 3, figsize=(18, 4))
+    plt.subplots_adjust(wspace=0.3)
+
+    def plot_metric(ax, metric_key, ylabel, title):
+        # RACE
+        ax.plot(epochs, metrics_race[f"train_{metric_key}"], label="RACE - Train", color="#1f77b4", marker='o', markersize=4, linewidth=2)
+        ax.plot(epochs, metrics_race[f"val_{metric_key}"], label="RACE - Val", color="#1f77b4", linestyle='--', marker='x', markersize=4, linewidth=2)
+
+        # # AngularAttention
+        # ax.plot(epochs, metrics_angular[f"train_{metric_key}"], label="Angular - Train", color="#ff7f0e", marker='s', markersize=4, linewidth=2)
+        # ax.plot(epochs, metrics_angular[f"val_{metric_key}"], label="Angular - Val", color="#ff7f0e", linestyle='--', marker='^', markersize=4, linewidth=2)
+
+        # GPT (Softmax)
+        ax.plot(epochs, metrics_bert[f"train_{metric_key}"], label="BERT - Train", color="#2ca02c", marker='D', markersize=4, linewidth=2)
+        ax.plot(epochs, metrics_bert[f"val_{metric_key}"], label="BERT - Val", color="#2ca02c", linestyle='--', marker='v', markersize=4, linewidth=2)
+
+        ax.set_title(title, fontsize=15)
+        ax.set_xlabel("Epoch", fontsize=13)
+        ax.set_ylabel(ylabel, fontsize=13)
+        ax.tick_params(axis='both', labelsize=11)
+        ax.grid(True, linestyle='--', alpha=0.5)
+        ax.legend(fontsize=10, loc="best")
+
+    plot_metric(axes[0], "loss", "Cross-Entropy Loss", "Loss (Train vs Val)")
+    plot_metric(axes[1], "ppl", "Perplexity", "Perplexity (Train vs Val)")
+    plot_metric(axes[2], "acc", "Accuracy", "Accuracy (Train vs Val)")
+
+    # Compose extra info string
+    extra_info = []
+    if seq_len is not None:
+        extra_info.append(f"Seq Len = {seq_len}")
+    if K is not None:
+        extra_info.append(f"K = {K}")
+    if L is not None:
+        extra_info.append(f"L = {L}")
+    if M is not None:
+        extra_info.append(f"M = {M}")
+    info_str = " | ".join(extra_info)
+
+    fig.suptitle(f"RACE vs BERT Attention\n{info_str}", fontsize=16)
+    plt.tight_layout(rect=[0, 0, 1, 0.92])
+    plt.savefig(save_path, dpi=300)
+    plt.show()
 
 start_experiment()

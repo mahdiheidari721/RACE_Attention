@@ -13,14 +13,14 @@ import matplotlib.pyplot as plt
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # ------------ CONSTANTS ------------
-SAMPLE_SIZE = 5000  # Reduced dataset size
+SAMPLE_SIZE = 2000  # Reduced dataset size
 
 BERT_CONFIG = {
     "vocab_size": 30522,    # Vocabulary size
-    "context_length": 128, # Context length
-    "emb_dim": 256,         # Embedding dimension
+    "context_length": 512, # Context length
+    "emb_dim": 128,         # Embedding dimension
     "n_heads": 2,          # Number of attention heads
-    "n_layers": 1,         # Number of layers
+    "n_layers": 8,         # Number of layers
     "drop_rate": 0.1,       # Dropout rate
     "qkv_bias": False,       # Query-Key-Value bias
     "K": 3,
@@ -115,7 +115,7 @@ class AngularAttention(nn.Module):
         W = W / (W.sum(-1,keepdim=True)+1e-6)
         W = self.dropout(W)
 
-        out = (W @ V).transpose(1,2).reshape(B, T, -1)
+        out = (W @ V).transpose(1,2).contiguous().view(B, T, -1)
         return self.out_proj(out)
 
 class AngularBlock(nn.Module):
@@ -168,7 +168,7 @@ class BatchedACE(nn.Module):
 
         # 1) flatten out to a big batch for keys:
         #    flat_K: [M*B*T*H, d_k]
-        flat_K = Kh.reshape(-1, dk)
+        flat_K = Kh.contiguous().view(-1, dk)
         #    projK_flat: [M*B*T*H, L*K]
         projK_flat = flat_K @ self.planes_T
         #    → [M*B*T*H, L, K]
@@ -176,19 +176,16 @@ class BatchedACE(nn.Module):
 
         # 2) compute soft‑hash logits & probs:
         #    [M*B*T*H*L, K] @ [K, R] → [M*B*T*H*L, R]
-        logitsK = (projK.tanh().div(temp)
-                        .reshape(-1, self.K)
-                   @ self.protos_T
-                  ).view(M, B, T, H, self.L, self.R)
+        logitsK = (projK.tanh().div(temp).view(-1, self.K) @ self.protos_T).view(M, B, T, H, self.L, self.R)
         probsK  = logitsK.softmax(dim=-1)     # [M,B,T,H,L,R]
 
         # 3) build your bucket‐summaries E via two small batched bmm’s:
         #    - collapse M,B,H into one dim so we can bmm along T
         MBH = M*B*H
         #    probs_flat: [MBH, T, L*R]
-        probs_flat = probsK.permute(0,1,3,2,4,5).reshape(MBH, T, self.L*self.R)
+        probs_flat = probsK.permute(0,1,3,2,4,5).contiguous().view(MBH, T, self.L*self.R)
         #    V_flat:      [MBH, T, d_k]
-        V_flat     = Vh.permute(0,1,3,2,4).reshape(MBH, T, dk)
+        V_flat     = Vh.permute(0,1,3,2,4).contiguous().view(MBH, T, dk)
         #    b_sum:      [MBH, L*R, d_k]
         b_sum = probs_flat.transpose(1,2).bmm(V_flat)
         #    A:          [MBH, 1, L*R]
@@ -198,15 +195,12 @@ class BatchedACE(nn.Module):
 
         # 4) same for queries → final outputs
         #    projQ → probsQ exactly like projK/logitsK/probsK
-        flat_Q = Qh.reshape(-1, dk)
+        flat_Q = Qh.contiguous().view(-1, dk)
         projQ  = (flat_Q @ self.planes_T).view(-1, self.L, self.K)
-        logitsQ= ((projQ.tanh().div(temp)
-                      .reshape(-1, self.K)
-                   @ self.protos_T
-                  ).view(M, B, T, H, self.L, self.R))
+        logitsQ= ((projQ.tanh().div(temp).view(-1, self.K) @ self.protos_T).view(M, B, T, H, self.L, self.R))
         probsQ = logitsQ.softmax(dim=-1)
         #    probsQ_flat: [MBH, T, L*R]
-        probsQ_flat = probsQ.permute(0,1,3,2,4,5).reshape(MBH, T, self.L*self.R)
+        probsQ_flat = probsQ.permute(0,1,3,2,4,5).contiguous().view(MBH, T, self.L*self.R)
 
         # 5) expected‐value lookup via one more bmm:
         #    [MBH, T, L*R] @ [MBH, L*R, d_k] → [MBH, T, d_k]
@@ -241,7 +235,7 @@ class RACEAttention(nn.Module):
 
         out_m = self.ace(pack(K), pack(V), pack(Q))     # [M,B,T,H,dk]
         out   = out_m.mean(dim=0)                       # [B,T,H,dk]
-        out   = out.transpose(1,2).reshape(B, T, -1)     # [B,T,d]
+        out   = out.transpose(1,2).contiguous().view(B, T, -1)     # [B,T,d]
         return self.drop(self.o(out))
 
 
@@ -461,19 +455,19 @@ def start_experiment():
     print(len(train_loader), len(val_loader))
     num_epochs = 3
     # ------------------ TRAINING MODELS -----------------
-    # print("Training BERT model...")
-    # torch.manual_seed(123)
-    # model_bert = LMModel(BERT_CONFIG, "bert")
-    # model_bert.to(device)
-    # optimizer_bert = torch.optim.AdamW(model_bert.parameters(), lr=1e-5, weight_decay=5e-05)
+    print("Training BERT model...")
+    torch.manual_seed(123)
+    model_bert = torch.compile(LMModel(BERT_CONFIG, "bert"))
+    model_bert.to(device)
+    optimizer_bert = torch.optim.AdamW(model_bert.parameters(), lr=1e-5, weight_decay=5e-05)
 
-    # metrics_bert = train_model_simple(
-    #     model_bert, train_loader, val_loader, optimizer_bert, device,
-    #     num_epochs=num_epochs)
+    metrics_bert = train_model_simple(
+        model_bert, train_loader, val_loader, optimizer_bert, device,
+        num_epochs=num_epochs)
     
     print("Training RACE model...")
     torch.manual_seed(123)
-    model_race = LMModel(BERT_CONFIG, "race")
+    model_race = torch.compile(LMModel(BERT_CONFIG, "race"))
     model_race.to(device)
     optimizer_race = torch.optim.AdamW(model_race.parameters(), lr=1e-5, weight_decay=5e-05)
 

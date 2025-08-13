@@ -1,31 +1,83 @@
+import os 
+# lm_task.py — put these at the very top
+import os
+os.environ.setdefault("OMP_NUM_THREADS", "1")      # start with 1 to rule out OMP deadlocks
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
+os.environ.setdefault("KMP_BLOCKTIME", "0")        # harmless on libomp, helps if iomp is present
+
 from torch.utils.data import Dataset, DataLoader
 import tiktoken
 import torch
-import numpy as np
+torch.set_num_threads(4)
+torch.set_num_interop_threads(4)
+from torch import nn
 from datasets import load_dataset
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-import numpy as np
 import time
-from race import RACEModel
-from gpt import GPTModel, AngularModel
-
-torch.autograd.set_detect_anomaly(True)
+from gpt import TransformerBlock, AngularBlock
+import torch.nn.functional as F
+import math
+from race import RACEBlock
+import torch._dynamo
+torch._dynamo.config.suppress_errors = True
 
 # ------------ CONSTANTS ------------
-SAMPLE_SIZE = 12  # Reduced dataset size
+SAMPLE_SIZE = 7000  # Reduced dataset size
 
 GPT_CONFIG_124M = {
     "vocab_size": 50257,    # Vocabulary size
-    "context_length": 64, # Context length
-    "emb_dim": 512,         # Embedding dimension
-    "n_heads": 8,          # Number of attention heads
-    "n_layers": 4,         # Number of layers
+    "context_length": 512, # Context length
+    "emb_dim": 128,         # Embedding dimension
+    "n_heads": 2,          # Number of attention heads
+    "n_layers": 8,         # Number of layers
     "drop_rate": 0.1,       # Dropout rate
-    "qkv_bias": False       # Query-Key-Value bias
+    "qkv_bias": False,       # Query-Key-Value bias
+    "K": 2,
+    "L": 2,
+    "M": 1
 }
 
-# ------------------------------------
+# ------------ Unified Model Class ------------
+class LMModel(nn.Module):
+    def __init__(self, cfg, attn_type="gpt", device="cpu"):
+        """
+        attn_type ∈ {"gpt","angular","race"}
+        """
+        super().__init__()
+        self.tok_emb = nn.Embedding(cfg["vocab_size"], cfg["emb_dim"])
+        self.pos_emb = nn.Embedding(cfg["context_length"], cfg["emb_dim"])
+        self.drop_emb= nn.Dropout(cfg["drop_rate"])
+        self.final_norm = nn.LayerNorm(cfg["emb_dim"])
+        self.out_head   = nn.Linear(cfg["emb_dim"], cfg["vocab_size"], bias=False)
+
+        # choose attention class
+        if attn_type == "gpt":
+            AttnBlock = TransformerBlock
+        elif attn_type == "angular":
+            AttnBlock = AngularBlock
+        elif attn_type == "race":
+            # our custom RACEBlock needs device
+            AttnBlock = lambda c: RACEBlock(c, device)
+        else:
+            raise ValueError(attn_type)
+
+        # build n_layers of whichever block
+        self.blocks = nn.Sequential(
+            *[AttnBlock(cfg) for _ in range(cfg["n_layers"])]
+        )
+
+    def forward(self, x):
+        B, T = x.shape
+        pos = torch.arange(T, device=x.device).unsqueeze(0)
+        x = self.tok_emb(x) + self.pos_emb(pos)
+        x = self.drop_emb(x)
+        x = self.blocks(x)
+        x = self.final_norm(x)
+        return self.out_head(x)
+
+# ----------------------------------------------------
 
 # ------------ DATA LOADING ------------
 
@@ -52,8 +104,7 @@ class GPTDatasetV1(Dataset):
 
 
 def create_dataloader_v1(txt, batch_size, max_length, 
-                         stride, shuffle=True, drop_last=True,
-                         num_workers=0):
+                         stride, shuffle=True, drop_last=True):
 
     # Initialize the tokenizer
     tokenizer = tiktoken.get_encoding("gpt2")
@@ -67,7 +118,7 @@ def create_dataloader_v1(txt, batch_size, max_length,
         batch_size=batch_size,
         shuffle=shuffle,
         drop_last=drop_last,
-        num_workers=num_workers
+        num_workers=0
     )
 
     return dataloader
@@ -76,72 +127,73 @@ def create_dataloader_v1(txt, batch_size, max_length,
 
 # ------------ EXAMPLE DATA ------------
 
-def calc_loss_acc_batch(input_batch, target_batch, model, device):
-    input_batch, target_batch = input_batch.to(device), target_batch.to(device)
-    logits = model(input_batch)
-    loss = torch.nn.functional.cross_entropy(logits.flatten(0, 1), target_batch.flatten())
-    # Compute accuracy
-    with torch.no_grad():
-        predictions = logits.argmax(dim=-1)  # Get indices of max logit
-        correct = (predictions == target_batch).float()
-        acc = correct.mean().item()  # Convert to scalar float
-    return loss, acc
-
-
-def calc_loss_acc_loader(data_loader, model, device, num_batches=None):
-    total_loss = 0.0
-    total_acc = 0.0
-
-    if len(data_loader) == 0:
-        print("Data loader is empty for loss calculation.")
-        return float("nan"), float("nan")
-    elif num_batches is None:
-        num_batches = len(data_loader)
-    else:
-        # Reduce the number of batches to match the total number of batches in the data loader
-        # if num_batches exceeds the number of batches in the data loader
-        num_batches = min(num_batches, len(data_loader))
-    for i, (input_batch, target_batch) in enumerate(data_loader):
-        if i < num_batches:
-            loss, acc = calc_loss_acc_batch(input_batch, target_batch, model, device)
-            total_loss += loss.item()
-            total_acc += acc
-        else:
-            break
-    return total_loss / num_batches, total_acc / num_batches
-
-
-# ------------ TRAINING ------------
-def train_model_simple(model, train_loader, val_loader, optimizer, device, num_epochs, eval_iter):
-    # Initialize lists to track losses and tokens seen
+def train_model_simple(model, train_loader, val_loader, optimizer, device, num_epochs, eval_iter=None):
     train_losses, val_losses = [], []
     train_ppls, val_ppls = [], []
     train_accs, val_accs = [], []
+    train_times, val_times = [], []
 
-    # Main training loop
-    for epoch in range(num_epochs):
-        model.train()  # Set model to training mode
-        
-        for input_batch, target_batch in tqdm(train_loader, desc=f"Epoch {epoch+1}"):
-            optimizer.zero_grad() # Reset loss gradients from previous batch iteration
-            loss, _ = calc_loss_acc_batch(input_batch, target_batch, model, device)
-            loss.backward() # Calculate loss gradients
+    for epoch in range(1, num_epochs + 1):
+        # === TRAIN ===
+        t0 = time.time()
+        model.train()
+        total_loss = 0.0
+        total_acc = 0.0
+
+        for x, y in tqdm(train_loader, desc=f"Epoch {epoch}"):
+            optimizer.zero_grad()
+            x, y = x.to(device), y.to(device)
+            logits = model(x)
+            loss = F.cross_entropy(logits.flatten(0, 1), y.flatten())
+            loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step() # Update model weights using loss gradients
+            optimizer.step()
 
-        train_loss, val_loss, train_acc, val_acc = evaluate_model(
-            model, train_loader, val_loader, device, eval_iter)
-        train_ppl = np.exp(train_loss)
-        val_ppl = np.exp(val_loss)
-        train_losses.append(train_loss)
-        val_losses.append(val_loss)
-        train_ppls.append(train_ppl)
-        val_ppls.append(val_ppl)
-        train_accs.append(train_acc)
-        val_accs.append(val_acc)
+            # accuracy
+            acc = (logits.argmax(-1) == y).float().mean().item()
+            total_loss += loss.item()
+            total_acc += acc
+            
+        train_time = time.time() - t0
+        train_times.append(train_time)
+        tr_l = total_loss / len(train_loader)
+        tr_a = total_acc / len(train_loader)
+        tr_p = math.exp(tr_l)
 
-        print(f"Ep {epoch+1}): "
-                f"Train loss {train_loss:.3f}, Val loss {val_loss:.3f} | Train PPL {train_ppl:.3f}, Val PPL {val_ppl:.3f} | Train acc {train_acc:.3f}, Val acc {val_acc:.3f}")  
+        # === VALIDATION ===
+        t1 = time.time()
+        model.eval()
+        val_loss_total = 0.0
+        val_acc_total = 0.0
+        with torch.no_grad():
+            for x, y in val_loader:
+                x, y = x.to(device), y.to(device)
+                logits = model(x)
+                loss = F.cross_entropy(logits.flatten(0, 1), y.flatten())
+                acc = (logits.argmax(-1) == y).float().mean().item()
+                val_loss_total += loss.item()
+                val_acc_total += acc
+        val_time = time.time() - t1
+        val_times.append(val_time)
+        va_l = val_loss_total / len(val_loader)
+        va_a = val_acc_total / len(val_loader)
+        va_p = math.exp(va_l)
+
+        # Store
+        train_losses.append(tr_l)
+        val_losses.append(va_l)
+        train_ppls.append(tr_p)
+        val_ppls.append(va_p)
+        train_accs.append(tr_a)
+        val_accs.append(va_a)
+
+        print(
+            f"Ep{epoch:2d} | "
+            f"train loss {tr_l:.3f}, acc {tr_a:.3f}, ppl {tr_p:.2f} "
+            f"(train_time {train_time:.1f}s) | "
+            f"val loss {va_l:.3f}, acc {va_a:.3f}, ppl {va_p:.2f} "
+            f"(val_time {val_time:.1f}s)"
+        )
 
     return {
         "train_loss": train_losses,
@@ -150,15 +202,10 @@ def train_model_simple(model, train_loader, val_loader, optimizer, device, num_e
         "val_ppl": val_ppls,
         "train_acc": train_accs,
         "val_acc": val_accs,
+        "train_time": train_times,
+        "val_time": val_times,
     }
 
-def evaluate_model(model, train_loader, val_loader, device, eval_iter):
-    model.eval()
-    with torch.no_grad():
-        train_loss, train_acc = calc_loss_acc_loader(train_loader, model, device, num_batches=eval_iter)
-        val_loss, val_acc = calc_loss_acc_loader(val_loader, model, device, num_batches=eval_iter)
-    model.train()
-    return train_loss, val_loss, train_acc, val_acc
 
 def load_small_tinystories():
     dataset = load_dataset("roneneldan/TinyStories")
@@ -180,22 +227,20 @@ def load_small_tinystories():
 
     train_loader = create_dataloader_v1(
         train_data,
-        batch_size=4,
+        batch_size=16,
         max_length=GPT_CONFIG_124M["context_length"],
         stride=GPT_CONFIG_124M["context_length"] // 2,
         drop_last=True,
-        shuffle=False,
-        num_workers=0
+        shuffle=False
     )
 
     val_loader = create_dataloader_v1(
         val_data,
-        batch_size=4,
+        batch_size=16,
         max_length=GPT_CONFIG_124M["context_length"],
         stride=GPT_CONFIG_124M["context_length"] // 2,
         drop_last=True,
-        shuffle=False,
-        num_workers=0
+        shuffle=False
     )
 
     print(f"Train data size: {len(train_loader.dataset)}")
@@ -214,28 +259,27 @@ def load_small_tinystories():
 
 def start_experiment():
     device = "cpu"
-    tokenizer = tiktoken.get_encoding("gpt2")
     train_loader, val_loader = load_small_tinystories()
-    num_epochs = 20
+    num_epochs = 4
 
     # ------------------ TRAINING GPT -----------------
-    print("Training GPT model...")
-    torch.manual_seed(123)
-    model_gpt = GPTModel(GPT_CONFIG_124M)
-    model_gpt.to(device)
-    optimizer_gpt = torch.optim.AdamW(model_gpt.parameters(), lr=0.0001, weight_decay=0.1)
+    # print("Training GPT model...")
+    # torch.manual_seed(123)
+    # model_gpt = torch.compile(LMModel(GPT_CONFIG_124M, attn_type="gpt"))
+    # model_gpt.to(device)
+    # optimizer_gpt = torch.optim.AdamW(model_gpt.parameters(), lr=1e-5, weight_decay=1e-2)
 
-    metrics_gpt = train_model_simple(
-        model_gpt, train_loader, val_loader, optimizer_gpt, device,
-        num_epochs=num_epochs, eval_iter=None
-    )
+    # metrics_gpt = train_model_simple(
+    #     model_gpt, train_loader, val_loader, optimizer_gpt, device,
+    #     num_epochs=num_epochs, eval_iter=None
+    # )
   
     # ------------------ TRAINING RACE -----------------
     print("Training RACE model...")
     torch.manual_seed(123)
-    model_race = RACEModel(GPT_CONFIG_124M)
+    model_race = LMModel(GPT_CONFIG_124M, attn_type="race")
     model_race.to(device)
-    optimizer_race = torch.optim.AdamW(model_race.parameters(), lr=0.0001, weight_decay=0.1)
+    optimizer_race = torch.optim.AdamW(model_race.parameters(), lr=1e-5, weight_decay=1e-2)
 
     metrics_race = train_model_simple(
         model_race, train_loader, val_loader, optimizer_race, device,
@@ -243,33 +287,37 @@ def start_experiment():
     )
 
     # ------------------ Training Angular ---------------
-    print("Training Angular model...")
-    torch.manual_seed(123)
-    model_angular = AngularModel(GPT_CONFIG_124M)
-    model_angular.to(device)
-    optimizer_angular = torch.optim.AdamW(model_angular.parameters(), lr=0.0001, weight_decay=0.1)
+    # print("Training Angular model...")
+    # torch.manual_seed(123)
+    # model_angular = LMModel(GPT_CONFIG_124M, attn_type="angular")
+    # model_angular.to(device)
+    # optimizer_angular = torch.optim.AdamW(model_angular.parameters(), lr=1e-5, weight_decay=0.01)
 
-    metrics_angular = train_model_simple(
-        model_angular, train_loader, val_loader, optimizer_angular, device,
-        num_epochs=num_epochs, eval_iter=None
-    )
+    # metrics_angular = train_model_simple(
+    #     model_angular, train_loader, val_loader, optimizer_angular, device,
+    #     num_epochs=num_epochs, eval_iter=None
+    # )
     
-    plot_comparison_metrics(metrics_race, metrics_gpt, "race.png")
+    plot_comparison_metrics(metrics_race, metrics_gpt, f"race_{GPT_CONFIG_124M['context_length']}.png")
 
-def plot_comparison_metrics(metrics_race, metrics_gpt, save_path):
+def plot_comparison_metrics(metrics_race, metrics_gpt, save_path, seq_len=GPT_CONFIG_124M["context_length"], K=GPT_CONFIG_124M["K"], L=GPT_CONFIG_124M["L"], M=GPT_CONFIG_124M["M"]):
     epochs = range(1, len(metrics_race["train_loss"]) + 1)
 
-    fig, axes = plt.subplots(1, 3, figsize=(20, 6))
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
     plt.subplots_adjust(wspace=0.3)
 
     def plot_metric(ax, metric_key, ylabel, title):
-        # Plot MaxKAttention
-        ax.plot(epochs, metrics_race[f"train_{metric_key}"], label="Race - Train", color="#1f77b4", marker='o', markersize=4, linewidth=2)
-        ax.plot(epochs, metrics_race[f"val_{metric_key}"], label="Race - Val", color="#800080", linestyle='--', marker='x', markersize=4, linewidth=2)
+        # RACE
+        ax.plot(epochs, metrics_race[f"train_{metric_key}"], label="RACE - Train", color="#1f77b4", marker='o', markersize=4, linewidth=2)
+        ax.plot(epochs, metrics_race[f"val_{metric_key}"], label="RACE - Val", color="#1f77b4", linestyle='--', marker='x', markersize=4, linewidth=2)
 
-        # Plot GPT (Softmax)
-        ax.plot(epochs, metrics_gpt[f"train_{metric_key}"], label="GPT - Train", color="#2ca02c", marker='s', markersize=4, linewidth=2)
-        ax.plot(epochs, metrics_gpt[f"val_{metric_key}"], label="GPT - Val", color="#d62728", linestyle='--', marker='^', markersize=4, linewidth=2)
+        # # AngularAttention
+        # ax.plot(epochs, metrics_angular[f"train_{metric_key}"], label="Angular - Train", color="#ff7f0e", marker='s', markersize=4, linewidth=2)
+        # ax.plot(epochs, metrics_angular[f"val_{metric_key}"], label="Angular - Val", color="#ff7f0e", linestyle='--', marker='^', markersize=4, linewidth=2)
+
+        # GPT (Softmax)
+        ax.plot(epochs, metrics_gpt[f"train_{metric_key}"], label="GPT - Train", color="#2ca02c", marker='D', markersize=4, linewidth=2)
+        ax.plot(epochs, metrics_gpt[f"val_{metric_key}"], label="GPT - Val", color="#2ca02c", linestyle='--', marker='v', markersize=4, linewidth=2)
 
         ax.set_title(title, fontsize=15)
         ax.set_xlabel("Epoch", fontsize=13)
@@ -279,12 +327,26 @@ def plot_comparison_metrics(metrics_race, metrics_gpt, save_path):
         ax.legend(fontsize=10, loc="best")
 
     plot_metric(axes[0], "loss", "Cross-Entropy Loss", "Loss (Train vs Val)")
-    plot_metric(axes[1], "acc", "Accuracy", "Accuracy (Train vs Val)")
-    plot_metric(axes[2], "ppl", "Perplexity", "Perplexity (Train vs Val)")
+    plot_metric(axes[1], "ppl", "Perplexity", "Perplexity (Train vs Val)")
 
-    fig.suptitle(f"RACEAttention vs MultiHeadAttention", fontsize=17)
-    plt.tight_layout(rect=[0, 0, 1, 0.94])
+    # Compose extra info string
+    extra_info = []
+    if seq_len is not None:
+        extra_info.append(f"Seq Len = {seq_len}")
+    if K is not None:
+        extra_info.append(f"K = {K}")
+    if L is not None:
+        extra_info.append(f"L = {L}")
+    if M is not None:
+        extra_info.append(f"M = {M}")
+    info_str = " | ".join(extra_info)
+
+    fig.suptitle(f"RACE vs GPT Attention\n{info_str}", fontsize=16)
+    plt.tight_layout(rect=[0, 0, 1, 0.92])
     plt.savefig(save_path, dpi=300)
     plt.show()
 
-start_experiment()
+if __name__ == "__main__":
+    import multiprocessing as mp
+    mp.set_start_method('spawn', force=True)
+    start_experiment()

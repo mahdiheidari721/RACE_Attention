@@ -1,30 +1,33 @@
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+import torch 
 from torch.utils.data import DataLoader
 import itertools
 import math
-import torch
 import torch.nn as nn
 from datasets import load_dataset
 import time
 from tqdm import tqdm
 import torch.nn.functional as F
 from transformers import BertTokenizerFast, DataCollatorForLanguageModeling
-import os
+from tokenizers import BertWordPieceTokenizer
 import matplotlib.pyplot as plt
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
+import torch._dynamo
+torch._dynamo.config.suppress_errors = True
 
 # ------------ CONSTANTS ------------
-SAMPLE_SIZE = 2000  # Reduced dataset size
+SAMPLE_SIZE = 20000  # Reduced dataset size
 
 BERT_CONFIG = {
     "vocab_size": 30522,    # Vocabulary size
     "context_length": 512, # Context length
-    "emb_dim": 128,         # Embedding dimension
-    "n_heads": 2,          # Number of attention heads
-    "n_layers": 8,         # Number of layers
+    "emb_dim": 384,         # Embedding dimension
+    "n_heads": 4,          # Number of attention heads
+    "n_layers": 6,         # Number of layers
     "drop_rate": 0.1,       # Dropout rate
     "qkv_bias": False,       # Query-Key-Value bias
-    "K": 3,
-    "L": 2,
+    "K": 5,
+    "L": 4,
     "M": 2
 }
 
@@ -50,12 +53,9 @@ class MultiHeadAttention(nn.Module):
         K = self.W_key(x).view(B, T, self.num_heads, self.head_dim).transpose(1,2)
         V = self.W_value(x).view(B, T, self.num_heads, self.head_dim).transpose(1,2)
 
-        # out = F.scaled_dot_product_attention(Q, K, V, is_causal=False)  # (B, H, T, head_dim)
-        attn = torch.softmax((Q @ K.transpose(-2,-1)) / math.sqrt(self.head_dim), dim=-1)
-        attn = self.dropout(attn)
-        out = attn @ V
+        out = F.scaled_dot_product_attention(Q, K, V, is_causal=False)  # (B, H, T, head_dim)
         out = out.transpose(1, 2).contiguous().view(B, T, -1)
-        return self.out_proj(out)
+        return self.out_proj(self.dropout(out))
     
 class TransformerBlock(nn.Module):
     def __init__(self, cfg):
@@ -147,96 +147,210 @@ class AngularBlock(nn.Module):
 
 # ------------- RACE ------------------
 class BatchedACE(nn.Module):
-    def __init__(self, d_k, K, L, M):
+    """
+    Non-causal BatchedACE with optional shared planes.
+    Inputs:
+      Khf, Vhf, Qhf : [M, B, T, H, d_k]
+    """
+    def __init__(self, d_k, K, L, M, device='cpu', share_planes: bool = False):
         super().__init__()
         self.d_k, self.K, self.L, self.M = d_k, K, L, M
         self.R = 1 << K
-        # planes: [L*K, d_k]  → project any [*,d_k] → [*,L,K]
-        planes = torch.randn(L, K, d_k)
-        self.register_buffer("planes_T", planes.view(L*K, d_k).T)    # [d_k, L*K]
-        # protos:  [K, R]      → project any [*,K]   → [*,R]
-        corners = torch.tensor(list(itertools.product([-1.,+1.],repeat=K)))
-        self.register_buffer("protos_T", corners.T)                  # [K, R]
+        self.share_planes = share_planes
 
+        if share_planes:
+            # Shared planes [L, K, d_k] --> [d_k, (L*K)]
+            planes = torch.randn(L, K, d_k, device=device)
+            self.register_buffer('planes_T', planes.view(L * K, d_k).T)   # [d_k, L*K]
+        else:
+            # Independent planes [M, L, K, d_k] --> [M, d_k, (L*K)]
+            planes = torch.randn(M, L, K, d_k, device=device)
+            planes = planes.view(M, L * K, d_k).transpose(1, 2)           # [M, d_k, L*K]
+            self.register_buffer('planes_T', planes)
+
+        # Prototypes (corners of {-1,+1}^K): [K, R]
+        corners = torch.tensor(list(itertools.product([-1., +1.], repeat=K)), device=device)
+        self.register_buffer('protos_T', corners.T)                        # [K, R]
+
+        # learnable temperature
         self.logit_temp = nn.Parameter(torch.log(torch.tensor(1.0)))
 
-    def forward(self, Kh, Vh, Qh):
-        # Kh,Vh,Qh: [M, B, T, H, d_k]
-        M,B,T,H,dk = Kh.shape
-        assert M==self.M and dk==self.d_k
-        temp = self.logit_temp.exp().clamp(1e-2, 10.0)
+    def forward(self, Khf, Vhf, Qhf, eps: float = 1e-6):
+        # Khf, Vhf, Qhf: [M, B, T, H, d_k]
+        M, B, T, H, dk = Khf.shape
+        assert M == self.M and dk == self.d_k
+        S = self.L * self.R
+        scale = self.logit_temp.exp().clamp(1e-2, 10.0) # uncomment when you make temp learnable
 
-        # 1) flatten out to a big batch for keys:
-        #    flat_K: [M*B*T*H, d_k]
-        flat_K = Kh.contiguous().view(-1, dk)
-        #    projK_flat: [M*B*T*H, L*K]
-        projK_flat = flat_K @ self.planes_T
-        #    → [M*B*T*H, L, K]
-        projK = projK_flat.view(-1, self.L, self.K)
+        if self.share_planes:
+            # Collapse M·B·H → N
+            N = M * B * H
+            Kh2 = Khf.permute(0, 1, 3, 2, 4).contiguous().view(N, T, dk)  # [N,T,dk]
+            Qh2 = Qhf.permute(0, 1, 3, 2, 4).contiguous().view(N, T, dk)
+            V2  = Vhf.permute(0, 1, 3, 2, 4).contiguous().view(N, T, dk)
 
-        # 2) compute soft‑hash logits & probs:
-        #    [M*B*T*H*L, K] @ [K, R] → [M*B*T*H*L, R]
-        logitsK = (projK.tanh().div(temp).view(-1, self.K) @ self.protos_T).view(M, B, T, H, self.L, self.R)
-        probsK  = logitsK.softmax(dim=-1)     # [M,B,T,H,L,R]
+            # Projections to L*K
+            projK = Kh2 @ self.planes_T                                     # [N,T,L*K]
+            projQ = Qh2 @ self.planes_T                                     # [N,T,L*K]
+        else:
+            # Keep ensembles separate; collapse only B·H
+            BH = B * H
+            Kh2 = Khf.permute(0, 1, 3, 2, 4).contiguous().view(M, BH, T, dk)  # [M,BH,T,dk]
+            Qh2 = Qhf.permute(0, 1, 3, 2, 4).contiguous().view(M, BH, T, dk)
+            V2  = Vhf.permute(0, 1, 3, 2, 4).contiguous().view(M, BH, T, dk)
 
-        # 3) build your bucket‐summaries E via two small batched bmm’s:
-        #    - collapse M,B,H into one dim so we can bmm along T
-        MBH = M*B*H
-        #    probs_flat: [MBH, T, L*R]
-        probs_flat = probsK.permute(0,1,3,2,4,5).contiguous().view(MBH, T, self.L*self.R)
-        #    V_flat:      [MBH, T, d_k]
-        V_flat     = Vh.permute(0,1,3,2,4).contiguous().view(MBH, T, dk)
-        #    b_sum:      [MBH, L*R, d_k]
-        b_sum = probs_flat.transpose(1,2).bmm(V_flat)
-        #    A:          [MBH, 1, L*R]
-        A = probs_flat.sum(dim=1, keepdim=True)
-        #    E_flat:     [MBH, L*R, d_k] normalized
-        E_flat = b_sum / (A.transpose(1,2) + 1e-6)
+            # One GEMM per ensemble
+            projK = torch.einsum('mbtd,mds->mbts', Kh2, self.planes_T)        # [M,BH,T,L*K]
+            projQ = torch.einsum('mbtd,mds->mbts', Qh2, self.planes_T)
+            # Merge M,BH → N
+            projK = projK.contiguous().view(M * BH, T, self.L * self.K)       # [N,T,L*K]
+            projQ = projQ.contiguous().view(M * BH, T, self.L * self.K)
+            V2    = V2.view(M * BH, T, dk)
+            N     = M * BH
 
-        # 4) same for queries → final outputs
-        #    projQ → probsQ exactly like projK/logitsK/probsK
-        flat_Q = Qh.contiguous().view(-1, dk)
-        projQ  = (flat_Q @ self.planes_T).view(-1, self.L, self.K)
-        logitsQ= ((projQ.tanh().div(temp).view(-1, self.K) @ self.protos_T).view(M, B, T, H, self.L, self.R))
-        probsQ = logitsQ.softmax(dim=-1)
-        #    probsQ_flat: [MBH, T, L*R]
-        probsQ_flat = probsQ.permute(0,1,3,2,4,5).contiguous().view(MBH, T, self.L*self.R)
+        # Reshape to [N,T,L,K] and soft-hash → probs over R buckets
+        projK = projK.view(N, T, self.L, self.K)
+        projQ = projQ.view(N, T, self.L, self.K)
 
-        # 5) expected‐value lookup via one more bmm:
-        #    [MBH, T, L*R] @ [MBH, L*R, d_k] → [MBH, T, d_k]
-        out_flat = probsQ_flat.bmm(E_flat)    # [MBH, T, dk]
-        # 6) un‐flatten & return
-        return out_flat.view(M, B, H, T, dk).permute(0,1,3,2,4)
+        logitsK = (projK.tanh().div(scale) @ self.protos_T)                   # [N,T,L,R]
+        logitsQ = (projQ.tanh().div(scale) @ self.protos_T)                   # [N,T,L,R]
+        probsK  = F.softmax(logitsK, dim=-1)                                   # [N,T,L,R]
+        probsQ  = F.softmax(logitsQ, dim=-1)                                   # [N,T,L,R]
 
+        # -------- Non-causal bucket summaries over the full sequence --------
+        # Collapse buckets L,R → S
+        probsK_S = probsK.contiguous().view(N, T, S)                           # [N,T,S]
+        probsQ_S = probsQ.contiguous().view(N, T, S)                           # [N,T,S]
 
+        # Weighted sums across time:
+        #   b_sum = probsK^T @ V   → [N,S,dk]
+        b_sum = probsK_S.transpose(1, 2).bmm(V2)                               # [N,S,dk]
+        #   A = sum_t probsK_t     → [N,S]
+        A = probsK_S.sum(dim=1)                                                # [N,S]
+        #   E = b_sum / (A + eps)  → [N,S,dk]
+        E = b_sum / (A.unsqueeze(-1) + eps)                                    # [N,S,dk]
+
+        # Query lookup per time (no prefix): [N,T,S] @ [N,S,dk] → [N,T,dk]
+        out2 = probsQ_S.bmm(E)                                                 # [N,T,dk]
+
+        # Unflatten back to [M,B,T,H,dk]
+        out = out2.view(M, B, H, T, dk).permute(0, 1, 3, 2, 4)                 # [M,B,T,H,dk]
+        return out
+
+class LinearAttention(nn.Module):
+    def __init__(self, d_in, d_out, dropout, num_heads, qkv_bias=False, eps=1e-6):
+        super().__init__()
+        assert d_out % num_heads == 0
+        self.num_heads = num_heads
+        self.head_dim  = d_out // num_heads
+        self.eps = eps
+
+        self.W_query = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.W_key   = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.W_value = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.out_proj = nn.Linear(d_out, d_out)
+        self.dropout = nn.Dropout(dropout)
+
+    def kernel(self, x):
+        # φ(x): positive-valued kernel feature map
+        return F.elu(x) + 1  # [B, H, T, D]
+
+    def forward(self, x):
+        B, T, _ = x.size()
+
+        # Linear projections
+        Q = self.W_query(x).view(B, T, self.num_heads, self.head_dim).transpose(1, 2)  # [B, H, T, D]
+        K = self.W_key(x).view(B, T, self.num_heads, self.head_dim).transpose(1, 2)    # [B, H, T, D]
+        V = self.W_value(x).view(B, T, self.num_heads, self.head_dim).transpose(1, 2)  # [B, H, T, D]
+
+        # Apply kernel φ
+        Q = self.kernel(Q)  # [B, H, T, D]
+        K = self.kernel(K)  # [B, H, T, D]
+
+        # Compute KV^T: [B, H, D, D]
+        KV = torch.einsum('bhtd,bhte->bhde', K, V)  # [B, H, D, D]
+
+        # Compute normalization factor: Z = Q * sum(K)
+        K_sum = K.sum(dim=2)  # [B, H, D]
+        Z = torch.einsum('bhtd,bhd->bht', Q, K_sum) + self.eps  # [B, H, T]
+
+        # Compute output: Q @ (KV)
+        context = torch.einsum('bhtd,bhde->bhte', Q, KV)  # [B, H, T, D]
+        out = context / Z.unsqueeze(-1)  # [B, H, T, D]
+
+        out = out.transpose(1, 2).contiguous().view(B, T, -1)  # [B, T, H*D]
+        return self.out_proj(out)
+
+class LinearBlock(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+        self.att  = LinearAttention(
+            d_in=cfg["emb_dim"], d_out=cfg["emb_dim"],
+            dropout=cfg["drop_rate"], num_heads=cfg["n_heads"],
+            qkv_bias=cfg["qkv_bias"]
+        )
+        self.norm1 = nn.LayerNorm(cfg["emb_dim"])
+        self.norm2 = nn.LayerNorm(cfg["emb_dim"])
+        self.ff    = nn.Sequential(
+                        nn.Linear(cfg["emb_dim"],4*cfg["emb_dim"]),
+                        nn.GELU(),
+                        nn.Linear(4*cfg["emb_dim"],cfg["emb_dim"])
+                        )
+        self.drop  = nn.Dropout(cfg["drop_rate"])
+
+    def forward(self, x):
+        h = x
+        x = self.norm1(x)
+        x = self.att(x)
+        x = self.drop(x) + h
+        h = x
+        x = self.norm2(x)
+        x = self.ff(x); x = self.drop(x) + h
+        return x
 
 class RACEAttention(nn.Module):
-    """Bidirectional RACEAttention using non‑causal ACE."""
-    def __init__(self, d, h, drop, M, K, L, qkv_bias=False):
+    def __init__(self, d_in, d_out, dropout,
+                 num_heads, L, K, N_M, qkv_bias=False, device='cpu'):
         super().__init__()
-        assert d % h == 0
-        self.h, self.dk, self.M = h, d//h, M
-        self.q = nn.Linear(d,d, bias=qkv_bias)
-        self.k = nn.Linear(d,d, bias=qkv_bias)
-        self.v = nn.Linear(d,d, bias=qkv_bias)
-        self.o = nn.Linear(d,d)
-        self.drop = nn.Dropout(drop)
-        self.ace = BatchedACE(self.dk, K, L, M)
+        assert d_in % num_heads == 0
+        self.H   = num_heads
+        self.d_k = d_in // num_heads
+        self.M   = N_M
+
+        self.q_proj = nn.Linear(d_in, d_in, bias=qkv_bias)
+        self.k_proj = nn.Linear(d_in, d_in, bias=qkv_bias)
+        self.v_proj = nn.Linear(d_in, d_in, bias=qkv_bias)
+        self.out    = nn.Linear(d_in, d_out)
+        self.drop   = nn.Dropout(dropout)
+        self.ace = BatchedACE(self.d_k, K, L, N_M, device=device)
 
     def forward(self, x):
         B, T, _ = x.shape
-        Q = self.q(x).view(B, T, self.h, self.dk)
-        K = self.k(x).view(B, T, self.h, self.dk)
-        V = self.v(x).view(B, T, self.h, self.dk)
+        H, d_k, M = self.H, self.d_k, self.M
 
-        # pack for ACE: [M,B,T,H,dk]
-        def pack(z):
-            return z.unsqueeze(0).expand(self.M, -1, -1, -1, -1)
+        # 1) project & reshape for ACE
+        Q = self.q_proj(x).view(B, T, H, d_k)
+        K = self.k_proj(x).view(B, T, H, d_k)
+        V = self.v_proj(x).view(B, T, H, d_k)
 
-        out_m = self.ace(pack(K), pack(V), pack(Q))     # [M,B,T,H,dk]
-        out   = out_m.mean(dim=0)                       # [B,T,H,dk]
-        out   = out.transpose(1,2).contiguous().view(B, T, -1)     # [B,T,d]
-        return self.drop(self.o(out))
+        # shape --> [M, B, T, H, d_k] by explicit unsqueeze
+        def pack(Z):
+            Zm = Z.unsqueeze(0).expand(M, -1, -1, -1, -1)
+            return Zm
+
+        Khf = pack(K)
+        Vhf = pack(V)
+        Qhf = pack(Q)
+
+        # 2) run ACE
+        out_hm = self.ace(Khf, Vhf, Qhf)  # [M,B,T,H,d_k]
+
+        # 3) average ensembles & merge heads
+        out = out_hm.mean(dim=0)          # [B,T,H,d_k]
+        out = out.permute(0,2,1,3).reshape(B, T, H * d_k)
+
+        # 4) final proj + dropout
+        return self.drop(self.out(out))
 
 
 
@@ -244,10 +358,10 @@ class RACEBlock(nn.Module):
     def __init__(self, cfg, device='cpu'):
         super().__init__()
         self.att   = RACEAttention(
-            d=cfg["emb_dim"],
-            drop=cfg["drop_rate"],
-            h=cfg["n_heads"], qkv_bias=cfg["qkv_bias"],
-            L=cfg["L"], K=cfg["K"], M=cfg["M"]
+            d_in=cfg["emb_dim"], d_out=cfg["emb_dim"],
+            dropout=cfg["drop_rate"],
+            num_heads=cfg["n_heads"], qkv_bias=cfg["qkv_bias"],
+            L=cfg["L"], K=cfg["K"], N_M=cfg["M"]
         )
         self.norm1 = nn.LayerNorm(cfg["emb_dim"])
         self.norm2 = nn.LayerNorm(cfg["emb_dim"])
@@ -261,12 +375,125 @@ class RACEBlock(nn.Module):
     def forward(self, x):
         h = x
         x = self.norm1(x)
-        x = self.att(x); x = self.drop(x) + h
+        x = self.att(x)
+        x = self.drop(x) + h
         h = x
         x = self.norm2(x)
-        x = self.ff(x); x = self.drop(x) + h
+        x = self.ff(x)
+        x = self.drop(x) + h
         return x
 
+
+class LinformerAttention(nn.Module):
+    """
+    Linformer-style attention: project K,V along sequence length T -> k (k << T),
+    then do standard scaled dot-product attention with softmax over k.
+
+    Shapes:
+      x: (B, T, d_in)
+      returns: (B, T, d_out)
+    """
+    def __init__(
+        self,
+        d: int,
+        dropout: float,
+        num_heads: int,
+        qkv_bias: bool,
+        k_proj_dim: int,      # low-rank sequence dim
+        max_seq_len: int    # allocate E up to this T, slice at runtime
+    ):
+        super().__init__()
+        assert d % num_heads == 0, "d_out must be divisible by num_heads"
+        self.h = num_heads
+        self.dk = d // num_heads
+        self.k_proj_dim = k_proj_dim
+        self.max_seq_len = max_seq_len
+
+        # token projections
+        self.W_query = nn.Linear(d,  d, bias=qkv_bias)
+        self.W_key   = nn.Linear(d,  d, bias=qkv_bias)
+        self.W_value = nn.Linear(d,  d, bias=qkv_bias)
+
+        # learnable sequence projections E_k, E_v: [T_max, k]
+        self.E_k = nn.Parameter(torch.empty(max_seq_len, k_proj_dim))
+        self.E_v = nn.Parameter(torch.empty(max_seq_len, k_proj_dim))
+
+        nn.init.xavier_uniform_(self.E_k)
+        nn.init.xavier_uniform_(self.E_v)
+
+        self.dropout = nn.Dropout(dropout)
+        self.out_proj = nn.Linear(d, d)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B, T, _ = x.shape
+        assert T <= self.max_seq_len, f"T={T} exceeds max_seq_len={self.max_seq_len}"
+        h, dk, k = self.h, self.dk, self.k_proj_dim
+
+        # Linear projections -> (B, h, T, dk)
+        Q = self.W_query(x).view(B, T, h, dk).transpose(1, 2).contiguous()
+        K = self.W_key(  x).view(B, T, h, dk).transpose(1, 2).contiguous()
+        V = self.W_value(x).view(B, T, h, dk).transpose(1, 2).contiguous()
+
+        # Sequence down-projection (T -> k) using E_k/E_v sliced to current T
+        Ek = self.E_k[:T]  # (T, k)
+        Ev = self.E_v[:T]  # (T, k)
+
+        # K_proj, V_proj: (B, h, k, dk)
+        # Contract over sequence axis
+        K_proj = torch.einsum("bhtd,tk->bhkd", K, Ek)
+        V_proj = torch.einsum("bhtd,tk->bhkd", V, Ev)
+
+        # Scaled dot-product attention over compressed length k
+        # scores: (B, h, T, k)
+        scale = 1.0 / math.sqrt(dk)
+        scores = torch.einsum("bhtd,bhkd->bhtk", Q, K_proj) * scale
+        attn = F.softmax(scores, dim=-1)
+
+        # Context: (B, h, T, dk)
+        ctx = torch.einsum("bhtk,bhkd->bhtd", attn, V_proj)
+
+        # Merge heads -> (B, T, d_out)
+        out = ctx.transpose(1, 2).contiguous().view(B, T, h * dk)
+        return self.out_proj(self.dropout(out))
+
+
+class LinformerBlock(nn.Module):
+    """
+    Drop-in analogue of your LinearBlock but using LinformerAttention.
+    Non-causal, no kernel; just K,V low-rank sequence projection.
+    """
+    def __init__(self, cfg):
+        super().__init__()
+        drop = cfg["drop_rate"]
+        qkv_bias = cfg["qkv_bias"]
+        k_proj_dim = 128
+
+        self.att  = LinformerAttention(
+            d=cfg["emb_dim"], dropout=drop, num_heads=cfg["n_heads"], qkv_bias=qkv_bias,
+            k_proj_dim=k_proj_dim, max_seq_len=cfg["context_length"]
+        )
+        self.norm1 = nn.LayerNorm(cfg["emb_dim"])
+        self.norm2 = nn.LayerNorm(cfg["emb_dim"])
+        self.ff    = nn.Sequential(
+                        nn.Linear(cfg["emb_dim"], 4 * cfg["emb_dim"]),
+                        nn.GELU(),
+                        nn.Linear(4 * cfg["emb_dim"], cfg["emb_dim"]),
+                     )
+        self.drop  = nn.Dropout(drop)
+
+    def forward(self, x):
+        # Attn sublayer
+        h = x
+        x = self.norm1(x)
+        x = self.att(x)
+        x = self.drop(x) + h
+
+        # FFN sublayer
+        h = x
+        x = self.norm2(x)
+        x = self.ff(x)
+        x = self.drop(x) + h
+        return x
 
 # --------------------------------------
 
@@ -274,40 +501,45 @@ class RACEBlock(nn.Module):
 
 class LMModel(nn.Module):
     def __init__(self, cfg, attn_type="gpt", device="cpu"):
-        """
-        attn_type ∈ {"gpt","angular","race"}
-        """
         super().__init__()
         self.tok_emb = nn.Embedding(cfg["vocab_size"], cfg["emb_dim"])
         self.pos_emb = nn.Embedding(cfg["context_length"], cfg["emb_dim"])
         self.drop_emb= nn.Dropout(cfg["drop_rate"])
         self.final_norm = nn.LayerNorm(cfg["emb_dim"])
+
+        # (Optional) keep a full-vocab head for convenience / non-MLM tasks
         self.out_head   = nn.Linear(cfg["emb_dim"], cfg["vocab_size"], bias=False)
 
-        # choose attention class
         if attn_type == "bert":
             AttnBlock = TransformerBlock
         elif attn_type == "angular":
             AttnBlock = AngularBlock
         elif attn_type == "race":
-            # our custom RACEBlock needs device
             AttnBlock = lambda c: RACEBlock(c, device)
+        elif attn_type == "linear":
+            AttnBlock = LinearBlock
+        elif attn_type == "linformer":
+            AttnBlock = LinformerBlock
         else:
             raise ValueError(attn_type)
 
-        # build n_layers of whichever block
-        self.blocks = nn.Sequential(
-            *[AttnBlock(cfg) for _ in range(cfg["n_layers"])]
-        )
+        self.blocks = nn.Sequential(*[AttnBlock(cfg) for _ in range(cfg["n_layers"])])
+
+    def forward_hidden(self, x):
+        """Return final hidden states [B,T,d] (use this for MLM masked-only loss)."""
+        B, T = x.shape
+        pos = torch.arange(T, device=x.device).unsqueeze(0)  # [1,T]
+        h = self.tok_emb(x) + self.pos_emb(pos)
+        h = self.drop_emb(h)
+        h = self.blocks(h)
+        h = self.final_norm(h)
+        return h  # [B,T,d]
 
     def forward(self, x):
-        B, T = x.shape
-        pos = torch.arange(T, device=x.device).unsqueeze(0)
-        x = self.tok_emb(x) + self.pos_emb(pos)
-        x = self.drop_emb(x)
-        x = self.blocks(x)
-        x = self.final_norm(x)
-        return self.out_head(x)
+        """Legacy full-vocab logits for non-MLM use (computes [B,T,V])."""
+        h = self.forward_hidden(x)
+        return self.out_head(h)
+
 
 # ------------------------------------
 
@@ -352,186 +584,241 @@ def load_small_tinystories():
 
 
 # ------------ TRAINING ------------
-def train_model_simple(model, train_loader, val_loader, optimizer, device, num_epochs):
+
+class LinearWarmupLR(torch.optim.lr_scheduler._LRScheduler):
+    """
+    Linear warmup to base LR for `warmup_steps` optimizer updates,
+    then linear decay to 0 by `total_steps`. Step this *per optimizer step*.
+    """
+    def __init__(self, optimizer, warmup_steps, total_steps, last_epoch=-1):
+        self.warmup_steps = max(1, int(warmup_steps))
+        self.total_steps  = max(self.warmup_steps + 1, int(total_steps))
+        super().__init__(optimizer, last_epoch)
+
+    def get_lr(self):
+        step = self.last_epoch + 1  # count optimizer steps
+        lrs = []
+        for base_lr in self.base_lrs:
+            if step <= self.warmup_steps:
+                lr = base_lr * (step / self.warmup_steps)
+            else:
+                progress = (step - self.warmup_steps) / max(1, self.total_steps - self.warmup_steps)
+                lr = base_lr * (1.0 - progress)
+            lrs.append(lr)
+        return lrs
+
+
+def train_model_simple(model, train_loader, val_loader, optimizer, device, num_epochs, cfg, grad_accum_steps=1):
+    import math, os, time
+    import torch
+    import torch.nn.functional as F
+    from tqdm import tqdm
+
     train_losses, val_losses = [], []
-    train_accs, val_accs = [], []
-    train_times, val_times = [], []
-    train_ppls, val_ppls = [], []
+    train_accs,   val_accs   = [], []
+    train_times,  val_times  = [], []
+    train_ppls,   val_ppls   = [], []
 
-    for epoch in range(1, num_epochs + 1):
-        # === TRAIN ===
-        t0 = time.time()
-        model.train()
-        total_loss = 0.0
-        total_correct = 0
-        total_tokens = 0
+    K, L, M = cfg.get("K", None), cfg.get("L", None), cfg.get("M", None)
+    out_path = f"trial_K{K}_L{L}_M{M}_MLM.txt"
 
-        for input_ids, labels in tqdm(train_loader, desc=f"Epoch {epoch}"):
-            input_ids = input_ids.to(device)
-            labels = labels.to(device)
+    # ---- schedule based on *optimizer steps* (not micro-steps) ----
+    steps_per_epoch   = len(train_loader)                                   # micro-steps
+    updates_per_epoch = math.ceil(steps_per_epoch / grad_accum_steps)       # optimizer steps
+    total_updates     = num_epochs * updates_per_epoch
+    warmup_updates    = max(1, int(0.01 * total_updates))                   # 1% warmup
 
-            optimizer.zero_grad()
-            outputs = model(input_ids)
-            logits = outputs  # [B, T, V]
+    scheduler = LinearWarmupLR(
+        optimizer,
+        warmup_steps=warmup_updates,
+        total_steps=total_updates,
+    )
 
-            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), labels.view(-1), ignore_index=-100)
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
+    def _log(fp, msg):
+        print(msg); fp.write(msg + "\n"); fp.flush()
 
-            total_loss += loss.item()
+    with open(out_path, "a", encoding="utf-8") as f:
+        _log(f, f"Epochs: {num_epochs}")
+        _log(f, "-" * 72)
 
-            # Accuracy (only on masked tokens)
-            preds = logits.argmax(dim=-1)
-            mask = labels != -100
-            correct = (preds == labels) & mask
-            total_correct += correct.sum().item()
-            total_tokens += mask.sum().item()
+        global_update = 0
+        for epoch in range(1, num_epochs + 1):
+            # === TRAIN ===
+            t0 = time.time()
+            model.train()
+            total_loss = 0.0
+            total_correct = 0
+            total_tokens  = 0
 
-        train_time = time.time() - t0
-        train_times.append(train_time)
-        tr_l = total_loss / len(train_loader)
-        tr_a = total_correct / total_tokens
-        tr_p = math.exp(tr_l)
-        train_losses.append(tr_l)
-        train_accs.append(tr_a)
-        train_ppls.append(tr_p)
+            optimizer.zero_grad(set_to_none=True)
+            accum_count = 0
 
-        # === VALIDATION ===
-        t1 = time.time()
-        model.eval()
-        val_loss_total = 0.0
-        val_correct = 0
-        val_tokens = 0
-
-        with torch.no_grad():
-            for input_ids, labels in val_loader:
+            for input_ids, labels in tqdm(train_loader, desc=f"Epoch {epoch}"):
                 input_ids = input_ids.to(device)
-                labels = labels.to(device)
+                labels    = labels.to(device)
 
-                outputs = model(input_ids)
-                logits = outputs
+                # (1) forward to hidden states for full sequence
+                h    = model.forward_hidden(input_ids)  # [B,T,d]
+                mask = (labels != -100)                 # [B,T], True on masked positions
 
-                loss = F.cross_entropy(logits.view(-1, logits.size(-1)), labels.view(-1), ignore_index=-100)
-                val_loss_total += loss.item()
+                # (2) select masked positions
+                if mask.any():
+                    h_mask = h[mask]                    # [Nmask, d]
+                    y_mask = labels[mask]               # [Nmask]
 
-                preds = logits.argmax(dim=-1)
-                mask = labels != -100
-                val_correct += ((preds == labels) & mask).sum().item()
-                val_tokens += mask.sum().item()
+                    # (3) weight tying: use embedding matrix as output weights
+                    W = model.tok_emb.weight            # [V, d]
+                    logits_mask = F.linear(h_mask, W)   # [Nmask, V]
 
-        val_time = time.time() - t1
-        val_times.append(val_time)
-        va_l = val_loss_total / len(val_loader)
-        va_a = val_correct / val_tokens
-        va_p = math.exp(va_l)
-        val_losses.append(va_l)
-        val_accs.append(va_a)
-        val_ppls.append(va_p)
+                    loss = F.cross_entropy(logits_mask, y_mask)
+                    # accuracy on masked tokens
+                    preds = logits_mask.argmax(dim=-1)
+                    total_correct += (preds == y_mask).sum().item()
+                    total_tokens  += y_mask.numel()
+                else:
+                    # keep graph valid if a batch happens to have no masked tokens
+                    loss = h.sum() * 0.0
 
-        print(
-            f"Ep{epoch:2d} | "
-            f"train loss {tr_l:.3f}, acc {tr_a:.3f}, ppl {tr_p:.2f} "
-            f"(train_time {train_time:.1f}s) | "
-            f"val loss   {va_l:.3f}, acc {va_a:.3f}, ppl {va_p:.2f} "
-            f"(val_time {val_time:.1f}s)"
-        )
+                # ---- accumulation: scale loss and delay optimizer step ----
+                (loss / grad_accum_steps).backward()
+                accum_count += 1
+                total_loss  += loss.item()
+
+                if accum_count == grad_accum_steps:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                    optimizer.step()
+                    scheduler.step()    # step scheduler *per optimizer step*
+                    optimizer.zero_grad(set_to_none=True)
+                    accum_count = 0
+                    global_update += 1
+
+            # flush remainder if last batch didn't align with boundary
+            if accum_count > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad(set_to_none=True)
+                global_update += 1
+
+            train_time = time.time() - t0
+            train_times.append(train_time)
+            tr_l = total_loss / max(1, len(train_loader))
+            tr_a = (total_correct / total_tokens) if total_tokens > 0 else 0.0
+            tr_p = math.exp(tr_l)  # masked-token perplexity
+            train_losses.append(tr_l); train_accs.append(tr_a); train_ppls.append(tr_p)
+
+            # === VALIDATION ===
+            t1 = time.time()
+            model.eval()
+            val_loss_total = 0.0
+            val_correct = 0
+            val_tokens  = 0
+            with torch.no_grad():
+                for input_ids, labels in val_loader:
+                    input_ids = input_ids.to(device)
+                    labels    = labels.to(device)
+
+                    h    = model.forward_hidden(input_ids)  # [B,T,d]
+                    mask = (labels != -100)
+
+                    if mask.any():
+                        h_mask = h[mask]
+                        y_mask = labels[mask]
+                        W = model.tok_emb.weight
+                        logits_mask = F.linear(h_mask, W)
+                        loss = F.cross_entropy(logits_mask, y_mask)
+                        val_loss_total += loss.item()
+                        preds = logits_mask.argmax(dim=-1)
+                        val_correct += (preds == y_mask).sum().item()
+                        val_tokens  += y_mask.numel()
+                    else:
+                        pass
+
+            val_time = time.time() - t1
+            val_times.append(val_time)
+            va_l = val_loss_total / max(1, len(val_loader))
+            va_a = (val_correct / val_tokens) if val_tokens > 0 else 0.0
+            va_p = math.exp(va_l)
+            val_losses.append(va_l); val_accs.append(va_a); val_ppls.append(va_p)
+
+            _log(
+                f,
+                (f"Ep{epoch:2d} | "
+                 f"train_loss {tr_l:.3f}, acc {tr_a:.3f}, ppl {tr_p:.1f} ({train_time:.1f}s) | "
+                 f"val_loss {va_l:.3f}, acc {va_a:.3f}, ppl {va_p:.1f} ({val_time:.1f}s) | "
+                 f"updates {global_update}/{total_updates}")
+            )
+
+        _log(f, "-" * 72)
+        _log(f, f"Log saved to: {os.path.abspath(out_path)}")
 
     return {
-        "train_loss": train_losses,
-        "val_loss": val_losses,
-        "train_ppl": train_ppls,
-        "val_ppl": val_ppls,
-        "train_acc": train_accs,
-        "val_acc": val_accs,
-        "train_time": train_times,
-        "val_time": val_times,
+        "train_loss": train_losses, "val_loss": val_losses,
+        "train_ppl": train_ppls,   "val_ppl": val_ppls,
+        "train_acc": train_accs,   "val_acc": val_accs,
+        "train_time": train_times, "val_time": val_times,
     }
 
 
+
+
 def start_experiment():
-    device = "cpu"
+    device = "cuda:7"
     train_loader, val_loader = load_small_tinystories()
     print(len(train_loader), len(val_loader))
-    num_epochs = 3
-    # ------------------ TRAINING MODELS -----------------
-    print("Training BERT model...")
-    torch.manual_seed(123)
-    model_bert = torch.compile(LMModel(BERT_CONFIG, "bert"))
-    model_bert.to(device)
-    optimizer_bert = torch.optim.AdamW(model_bert.parameters(), lr=1e-5, weight_decay=5e-05)
+    num_epochs = 100
+    # ------------------ TRAINING MODELS ----------------
+    # print("Training BERT model...")
+    # torch.manual_seed(123)
+    # model_bert = torch.compile(LMModel(BERT_CONFIG, "bert"))
+    # model_bert.to(device)
+    # optimizer_bert = torch.optim.AdamW(model_bert.parameters(), lr=6e-4, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.1)
 
-    metrics_bert = train_model_simple(
-        model_bert, train_loader, val_loader, optimizer_bert, device,
-        num_epochs=num_epochs)
+    # metrics_bert = train_model_simple(
+    #     model_bert, train_loader, val_loader, optimizer_bert, device,
+    #     num_epochs=num_epochs, cfg=BERT_CONFIG)
     
     print("Training RACE model...")
     torch.manual_seed(123)
     model_race = torch.compile(LMModel(BERT_CONFIG, "race"))
     model_race.to(device)
-    optimizer_race = torch.optim.AdamW(model_race.parameters(), lr=1e-5, weight_decay=5e-05)
+    print(sum(p.numel() for p in model_race.parameters() if p.requires_grad))
+    optimizer_race = torch.optim.AdamW(model_race.parameters(), lr=6e-4, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.1)
 
     metrics_race = train_model_simple(
         model_race, train_loader, val_loader, optimizer_race, device,
-        num_epochs=num_epochs)
+        num_epochs=num_epochs, cfg=BERT_CONFIG)
     
-    plot_comparison_metrics(metrics_race, metrics_bert, f"mlm2_{BERT_CONFIG['context_length']}.png")
+    # print("Training LinearAttention...")
+    # torch.manual_seed(123)
+    # model_linear = torch.compile(LMModel(BERT_CONFIG, "linear"))
+    # model_linear.to(device)
+    # optimizer_linear = torch.optim.AdamW(model_linear.parameters(), lr=6e-4, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.1)
+
+    # metrics_linear = train_model_simple(
+    #     model_linear, train_loader, val_loader, optimizer_linear, device,
+    #     num_epochs=num_epochs, cfg=BERT_CONFIG)
+
+    # print("Training Linformer...")
+    # torch.manual_seed(123)
+    # model_linformer = torch.compile(LMModel(BERT_CONFIG, "linformer"))
+    # model_linformer.to(device)
+    # optimizer_linformer = torch.optim.AdamW(model_linformer.parameters(), lr=6e-4, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.1)
+
+    # metrics_linformer = train_model_simple(
+    #     model_linformer, train_loader, val_loader, optimizer_linformer, device,
+    #     num_epochs=num_epochs, cfg=BERT_CONFIG)
+
     # print("Training Angular model...")
     # torch.manual_seed(123)
     # model_angular = torch.compile(LMModel(BERT_CONFIG, "angular"))
     # model_angular.to(device)
-    # optimizer_angular = torch.optim.AdamW(model_angular.parameters(), lr=0.0001, weight_decay=0.1)
+    # optimizer_angular = torch.optim.AdamW(model_angular.parameters(), lr=6e-4, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.1)
 
-    # metrics_race = train_model_simple(
+    # metrics_angular = train_model_simple(
     #     model_angular, train_loader, val_loader, optimizer_angular, device,
-    #     num_epochs=num_epochs)
-    
+    #     num_epochs=num_epochs, cfg=BERT_CONFIG)
 
-def plot_comparison_metrics(metrics_race, metrics_bert, save_path, seq_len=BERT_CONFIG["context_length"], K=BERT_CONFIG["K"], L=BERT_CONFIG["L"], M=BERT_CONFIG["M"]):
-    epochs = range(1, len(metrics_race["train_loss"]) + 1)
 
-    fig, axes = plt.subplots(1, 3, figsize=(18, 4))
-    plt.subplots_adjust(wspace=0.3)
-
-    def plot_metric(ax, metric_key, ylabel, title):
-        # RACE
-        ax.plot(epochs, metrics_race[f"train_{metric_key}"], label="RACE - Train", color="#1f77b4", marker='o', markersize=4, linewidth=2)
-        ax.plot(epochs, metrics_race[f"val_{metric_key}"], label="RACE - Val", color="#1f77b4", linestyle='--', marker='x', markersize=4, linewidth=2)
-
-        # # AngularAttention
-        # ax.plot(epochs, metrics_angular[f"train_{metric_key}"], label="Angular - Train", color="#ff7f0e", marker='s', markersize=4, linewidth=2)
-        # ax.plot(epochs, metrics_angular[f"val_{metric_key}"], label="Angular - Val", color="#ff7f0e", linestyle='--', marker='^', markersize=4, linewidth=2)
-
-        # GPT (Softmax)
-        ax.plot(epochs, metrics_bert[f"train_{metric_key}"], label="BERT - Train", color="#2ca02c", marker='D', markersize=4, linewidth=2)
-        ax.plot(epochs, metrics_bert[f"val_{metric_key}"], label="BERT - Val", color="#2ca02c", linestyle='--', marker='v', markersize=4, linewidth=2)
-
-        ax.set_title(title, fontsize=15)
-        ax.set_xlabel("Epoch", fontsize=13)
-        ax.set_ylabel(ylabel, fontsize=13)
-        ax.tick_params(axis='both', labelsize=11)
-        ax.grid(True, linestyle='--', alpha=0.5)
-        ax.legend(fontsize=10, loc="best")
-
-    plot_metric(axes[0], "loss", "Cross-Entropy Loss", "Loss (Train vs Val)")
-    plot_metric(axes[1], "ppl", "Perplexity", "Perplexity (Train vs Val)")
-    plot_metric(axes[2], "acc", "Accuracy", "Accuracy (Train vs Val)")
-
-    # Compose extra info string
-    extra_info = []
-    if seq_len is not None:
-        extra_info.append(f"Seq Len = {seq_len}")
-    if K is not None:
-        extra_info.append(f"K = {K}")
-    if L is not None:
-        extra_info.append(f"L = {L}")
-    if M is not None:
-        extra_info.append(f"M = {M}")
-    info_str = " | ".join(extra_info)
-
-    fig.suptitle(f"RACE vs BERT Attention\n{info_str}", fontsize=16)
-    plt.tight_layout(rect=[0, 0, 1, 0.92])
-    plt.savefig(save_path, dpi=300)
-    plt.show()
 
 start_experiment()

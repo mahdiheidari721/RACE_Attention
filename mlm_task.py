@@ -26,9 +26,9 @@ BERT_CONFIG = {
     "n_layers": 6,         # Number of layers
     "drop_rate": 0.1,       # Dropout rate
     "qkv_bias": False,       # Query-Key-Value bias
-    "K": 5,
-    "L": 4,
-    "M": 2
+    "K": 1,
+    "L": 1,
+    "M": 5
 }
 
 # ------------------------------------
@@ -495,6 +495,139 @@ class LinformerBlock(nn.Module):
         x = self.drop(x) + h
         return x
 
+def favorplus_features(x, proj, eps=1e-6):
+    """
+    FAVOR+ positive random features for softmax kernel.
+    x:    [B,H,T,D]
+    proj: [H,M,D]  (one matrix per head; rows ~ N(0, I))
+    ->    [B,H,T,M]  (non-negative)
+    """
+    # x @ W^T  -> [B,H,T,M]
+    xw = torch.einsum('bhtd,hmd->bhtm', x, proj)
+
+    # stabilize across feature dimension
+    xw = xw - xw.max(dim=-1, keepdim=True).values
+
+    # exp( xW^T - ||x||^2/2 )
+    exp_part  = torch.exp(xw)                         # [B,H,T,M]
+    x_norm_sq = (x ** 2).sum(dim=-1, keepdim=True)    # [B,H,T,1]
+    base      = torch.exp(-0.5 * x_norm_sq)           # [B,H,T,1]
+    return exp_part * base + eps                      # strictly positive
+
+
+class FavorPlusAttention(nn.Module):
+    """
+    Non-causal FAVOR+ (Performer) attention (softmax kernel via positive RF).
+    - Pad-mask aware (mask: 1=keep, 0=pad).
+    - Saves pre-projection context in self.last_ctx (B,T,d) and per-head in self.last_ctx_heads (B,H,T,dk).
+    """
+    def __init__(self, d, h, m_features=256, drop=0.0, qkv_bias=False, seed=None):
+        super().__init__()
+        assert d % h == 0, "Embedding dim must be divisible by n_heads"
+        self.h  = h
+        self.dk = d // h
+        self.m  = m_features
+
+        self.q = nn.Linear(d, d, bias=qkv_bias)
+        self.k = nn.Linear(d, d, bias=qkv_bias)
+        self.v = nn.Linear(d, d, bias=qkv_bias)
+        self.o = nn.Linear(d, d)
+        self.drop = nn.Dropout(drop)
+
+        # Draw Gaussian projection matrices per head: [H,M,Dk]
+        if seed is not None:
+            torch.manual_seed(seed)
+        proj = torch.randn(h, m_features, self.dk)     # ~ N(0,1)
+        self.register_buffer("proj", proj)             # no grad; moves with device
+
+        # For inspection/plots
+        self.ctx = None
+        self.eps = 1e-6
+
+    def forward(self, x):
+        """
+        x:    (B, T, d)
+        mask: (B, T) with 1/True = keep, 0/False = pad
+        return: (B, T, d)
+        """
+        B, T, d = x.shape
+        h, dk, m = self.h, self.dk, self.m
+
+        # Projections -> (B,H,T,dk)
+        Q = self.q(x).view(B, T, h, dk).transpose(1, 2).contiguous()
+        K = self.k(x).view(B, T, h, dk).transpose(1, 2).contiguous()
+        V = self.v(x).view(B, T, h, dk).transpose(1, 2).contiguous()
+
+        # Scale like softmax attention: exp(q·k / sqrt(dk)) ≡ use q/√dk inside features
+        Qs = Q / math.sqrt(dk)
+        Ks = K / math.sqrt(dk)
+
+
+        # Positive random features
+        phiQ = favorplus_features(Qs, self.proj, eps=self.eps)/ math.sqrt(m)   # [B,H,T,M]
+        phiK = favorplus_features(Ks, self.proj, eps=self.eps) / math.sqrt(m)  # [B,H,T,M]
+
+
+        # Global (non-causal) aggregation over time
+        # KV   = sum_t phiK_t^T ⊗ V_t  -> (B,H,M,dk)
+        # Ksum = sum_t phiK_t          -> (B,H,M)
+        KV   = torch.einsum("bhtm,bhtd->bhmd", phiK, V)
+        Ksum = phiK.sum(dim=2)
+
+        # Per-query readout
+        # num = phiQ @ KV   -> (B,H,T,dk)
+        # den = phiQ · Ksum -> (B,H,T,1)
+        num = torch.einsum("bhtm,bhmd->bhtd", phiQ, KV)
+        den = torch.einsum("bhtm,bhm->bht",   phiQ, Ksum).unsqueeze(-1) + self.eps
+        out_heads = num / den                          # (B,H,T,dk)
+
+        # Save pre-projection context for visualization
+        merged = out_heads.transpose(1, 2).contiguous().view(B, T, h * dk)
+        self.ctx = merged
+
+        # Standard output path
+        merged = self.drop(merged)
+        return self.o(merged)
+    
+
+class PerformerBlock(nn.Module):
+    """
+    Residual block with FAVOR+ attention + FFN, mirroring your LinearBlock.
+    """
+    def __init__(self, cfg):
+        super().__init__()
+        self.att = FavorPlusAttention(
+            d=cfg["emb_dim"],
+            h=cfg["n_heads"],
+            m_features=cfg.get("m_features", 256),
+            drop=cfg["drop_rate"],
+            qkv_bias=cfg.get("qkv_bias", False),
+            seed=cfg.get("favor_seed", None),
+        )
+        self.norm1 = nn.LayerNorm(cfg["emb_dim"])
+        self.norm2 = nn.LayerNorm(cfg["emb_dim"])
+        self.ff    = nn.Sequential(
+                        nn.Linear(cfg["emb_dim"], 4*cfg["emb_dim"]),
+                        nn.GELU(),
+                        nn.Linear(4*cfg["emb_dim"], cfg["emb_dim"])
+                     )
+        self.drop  = nn.Dropout(cfg["drop_rate"])
+
+    def forward(self, x):
+        # Pre-norm + attention
+        h = x
+        x = self.norm1(x)
+        x = self.att(x)
+        x = self.drop(x) + h
+
+        # FFN
+        h = x
+        x = self.norm2(x)
+        x = self.ff(x)
+        x = self.drop(x) + h
+        return x
+
+
 # --------------------------------------
 
 # ------------ MODEL DEFINITION -----------
@@ -520,6 +653,8 @@ class LMModel(nn.Module):
             AttnBlock = LinearBlock
         elif attn_type == "linformer":
             AttnBlock = LinformerBlock
+        elif attn_type == "performer":
+            AttnBlock = PerformerBlock
         else:
             raise ValueError(attn_type)
 
@@ -763,7 +898,7 @@ def train_model_simple(model, train_loader, val_loader, optimizer, device, num_e
 
 
 def start_experiment():
-    device = "cuda:7"
+    device = "cuda:1"
     train_loader, val_loader = load_small_tinystories()
     print(len(train_loader), len(val_loader))
     num_epochs = 100
@@ -778,15 +913,25 @@ def start_experiment():
     #     model_bert, train_loader, val_loader, optimizer_bert, device,
     #     num_epochs=num_epochs, cfg=BERT_CONFIG)
     
-    print("Training RACE model...")
-    torch.manual_seed(123)
-    model_race = torch.compile(LMModel(BERT_CONFIG, "race"))
-    model_race.to(device)
-    print(sum(p.numel() for p in model_race.parameters() if p.requires_grad))
-    optimizer_race = torch.optim.AdamW(model_race.parameters(), lr=6e-4, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.1)
+    # print("Training RACE model...")
+    # torch.manual_seed(123)
+    # model_race = torch.compile(LMModel(BERT_CONFIG, "race"))
+    # model_race.to(device)
+    # print(sum(p.numel() for p in model_race.parameters() if p.requires_grad))
+    # optimizer_race = torch.optim.AdamW(model_race.parameters(), lr=6e-4, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.1)
 
-    metrics_race = train_model_simple(
-        model_race, train_loader, val_loader, optimizer_race, device,
+    # metrics_race = train_model_simple(
+    #     model_race, train_loader, val_loader, optimizer_race, device,
+    #     num_epochs=num_epochs, cfg=BERT_CONFIG)
+    
+    print("Training PERFORMER model...")
+    torch.manual_seed(123)
+    model_performer = torch.compile(LMModel(BERT_CONFIG, "performer"))
+    model_performer.to(device)
+    optimizer_performer = torch.optim.AdamW(model_performer.parameters(), lr=6e-4, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.1)
+
+    metrics_performer = train_model_simple(
+        model_performer, train_loader, val_loader, optimizer_performer, device,
         num_epochs=num_epochs, cfg=BERT_CONFIG)
     
     # print("Training LinearAttention...")

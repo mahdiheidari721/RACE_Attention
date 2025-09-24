@@ -772,6 +772,7 @@ def run(cfg: TrainConfig, lr=1e-5, wd=5e-05) -> Dict[str, List[float]]:
         v_loss_sum = 0.0
         v_acc_sum  = 0.0
         v_steps = 0
+
         with torch.no_grad():
             for x, mask, y in val_loader:
                 x = x.to(cfg.device, non_blocking=True)
@@ -780,7 +781,7 @@ def run(cfg: TrainConfig, lr=1e-5, wd=5e-05) -> Dict[str, List[float]]:
                 with torch.amp.autocast('cuda', enabled=(cfg.amp and "cuda" in cfg.device)):
                     logits = module(x, mask)
                     loss = F.cross_entropy(logits, y)
-                v_loss_sum += v_loss.item()
+                v_loss_sum += loss.item()
                 v_acc_sum  += (logits.argmax(-1) == y).float().mean().item()
                 v_steps += 1
         va_time = time.time() - t1

@@ -6,10 +6,10 @@ import math
 from torch.autograd import Function
 from race_ext import race_pref
 
-class RFAPrefixMeanFlatFn(Function):
+class RACEPrefixMeanFlatFn(Function):
     @staticmethod
     def forward(ctx, probsK_flat: torch.Tensor, V_flat: torch.Tensor, eps: float):
-        E_flat = race_pref.rfa_prefix_mean_flat(probsK_flat, V_flat, float(eps))
+        E_flat = race_pref.race_prefix_mean_flat(probsK_flat, V_flat, float(eps))
         ctx.save_for_backward(probsK_flat, V_flat)
         ctx.eps = float(eps)
         return E_flat
@@ -18,7 +18,7 @@ class RFAPrefixMeanFlatFn(Function):
     def backward(ctx, gradE_flat):
         probsK_flat, V_flat = ctx.saved_tensors
         gradE_flat = gradE_flat.contiguous()
-        gW_flat, gV_flat = race_pref.rfa_prefix_mean_flat_bw(
+        gW_flat, gV_flat = race_pref.race_prefix_mean_flat_bw(
             probsK_flat, V_flat, gradE_flat, ctx.eps
         )
         return gW_flat, gV_flat, None  # None for eps
@@ -104,35 +104,33 @@ class BatchedACE(nn.Module):
         logitsQ = (projQ.tanh().div(scale) @ self.protos_T)
         probsQ  = F.softmax(logitsQ, dim=-1)
 
-        # # 2) causal prefix sums
-        # A_pref = probsK.cumsum(dim=1)                                    # [N, T, L, R]
-        # B_pref = (probsK.unsqueeze(-1) * V2.unsqueeze(2).unsqueeze(3)).cumsum(dim=1)                                       # [N, T, L, R, d_k]
-        # E_pref = B_pref.div(A_pref.unsqueeze(-1).add(1e-6))              # [N, T, L, R, d_k]
+        # 2) causal prefix sums
+        A_pref = probsK.cumsum(dim=1)                                    # [N, T, L, R]
+        B_pref = (probsK.unsqueeze(-1) * V2.unsqueeze(2).unsqueeze(3)).cumsum(dim=1)                                       # [N, T, L, R, d_k]
+        E_pref = B_pref.div(A_pref.unsqueeze(-1).add(1e-6))              # [N, T, L, R, d_k]
 
         S      = self.L * self.R
-        # use the FLAT autograd op (fast; uses your C++ fwd+bwd)
-        # 1) flatten streams so each (n,l,r) is a stream over t
-        # probsK: [N,T,L,R] -> [N,L,R,T] -> [NS, T]
-        probsK_flat = probsK.permute(0, 2, 3, 1).contiguous().view(N * S, T)
 
-        # V2: [N,T,dk] -> duplicate across S then align time -> [NS, T, dk]
-        V_flat = (
-            V2.unsqueeze(2).unsqueeze(3)           # [N,T,1,1,dk]
-                .expand(N, T, self.L, self.R, dk)               # [N,T,L,R,dk]
-                .permute(0, 2, 3, 1, 4)               # [N,L,R,T,dk]
-                .contiguous()
-                .view(N * S, T, dk)
-        )
+        # If a user wants to run this on CPU - they can uncomment the following and comment out the #2 on top.
+        # probsK_flat = probsK.permute(0, 2, 3, 1).contiguous().view(N * S, T)
 
-        # 2) prefix mean
-        E_flat = RFAPrefixMeanFlatFn.apply(probsK_flat, V_flat, 1e-6)  # [NS, T, dk]
-        # back to [N,T,L,R,dk]
-        E_pref = (
-            E_flat.view(N, self.L, self.R, T, dk)
-                    .permute(0, 3, 1, 2, 4)
-                    .contiguous()
-        )
+        # # V2: [N,T,dk] -> duplicate across S then align time -> [NS, T, dk]
+        # V_flat = (
+        #     V2.unsqueeze(2).unsqueeze(3)           # [N,T,1,1,dk]
+        #         .expand(N, T, self.L, self.R, dk)               # [N,T,L,R,dk]
+        #         .permute(0, 2, 3, 1, 4)               # [N,L,R,T,dk]
+        #         .contiguous()
+        #         .view(N * S, T, dk)
+        # )
 
+        # # 2) prefix mean
+        # E_flat = RACEPrefixMeanFlatFn.apply(probsK_flat, V_flat, 1e-6)  # [NS, T, dk]
+        # # back to [N,T,L,R,dk]
+        # E_pref = (
+        #     E_flat.view(N, self.L, self.R, T, dk)
+        #             .permute(0, 3, 1, 2, 4)
+        #             .contiguous()
+        # )
         # 3) lookup via one batched bmm
         out2 = torch.bmm(
             probsQ.view(N*T, 1, S),            # [N*T, 1, S]

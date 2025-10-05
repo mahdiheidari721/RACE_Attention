@@ -11,69 +11,6 @@ static void check_float32_contig(const Tensor &t, const char *name, int expected
     TORCH_CHECK(t.dim() == expected_dim, name, " must have ", expected_dim, " dims");
 }
 
-// probsK: [N,T,S], V:[N,T,D] -> E:[N,T,S,D]
-// This is much slower than the flat one! I think this is becasuse of the memory layout, we can do more work in flat mode.
-Tensor rfa_prefix_mean_ntsd(Tensor probsK, Tensor V, double eps)
-{
-    check_float32_contig(probsK, "probsK", 3);
-    check_float32_contig(V, "V", 3);
-    TORCH_CHECK(probsK.device() == V.device(), "probsK and V must be on same device");
-    TORCH_CHECK(probsK.size(0) == V.size(0) && probsK.size(1) == V.size(1),
-                "N and T must match between probsK and V");
-
-    const int64_t N = probsK.size(0);
-    const int64_t T = probsK.size(1);
-    const int64_t S = probsK.size(2);
-    const int64_t D = V.size(2);
-
-    auto E = at::empty({N, T, S, D}, V.options());
-
-    const float *PK = probsK.data_ptr<float>();
-    const float *VV = V.data_ptr<float>();
-    float *EO = E.data_ptr<float>();
-
-    const int64_t stridePK_N = T * S;
-    const int64_t stridePK_T = S;
-
-    const int64_t strideV_N = T * D;
-    const int64_t strideV_T = D;
-
-    const int64_t strideE_N = T * S * D;
-    const int64_t strideE_T = S * D;
-    const int64_t strideE_S = D;
-
-#pragma omp parallel for collapse(2)
-    for (int64_t n = 0; n < N; ++n)
-    {
-        for (int64_t s = 0; s < S; ++s)
-        {
-            double A = 0.0;
-            std::vector<double> B(D, 0.0);
-
-            const float *pk_n = PK + n * stridePK_N;
-            const float *v_n = VV + n * strideV_N;
-            float *e_n = EO + n * strideE_N;
-
-            for (int64_t t = 0; t < T; ++t)
-            {
-                const float *pk_nt = pk_n + t * stridePK_T + s;     // scalar
-                const float *v_nt = v_n + t * strideV_T;            // [D]
-                float *e_nts = e_n + t * strideE_T + s * strideE_S; // [D]
-
-                const double w = static_cast<double>(*pk_nt);
-                A += w;
-                for (int64_t d = 0; d < D; ++d)
-                    B[d] += w * static_cast<double>(v_nt[d]);
-
-                const double inv = 1.0 / (A + eps);
-                for (int64_t d = 0; d < D; ++d)
-                    e_nts[d] = static_cast<float>(B[d] * inv);
-            }
-        }
-    }
-    return E;
-}
-
 // probsK_flat: [NS,T], V_flat:[NS,T,D] -> E_flat:[NS,T,D]
 // -----------------------------------------------------------------------------
 // Computes causal prefix means for RACE Attention
@@ -96,7 +33,7 @@ Tensor rfa_prefix_mean_ntsd(Tensor probsK, Tensor V, double eps)
 // - Complexity: O(NS * T * D). Usually memory-bandwidth bound.
 //
 // -----------------------------------------------------------------------------
-Tensor rfa_prefix_mean_flat(Tensor probsK_flat, Tensor V_flat, double eps)
+Tensor race_prefix_mean_flat(Tensor probsK_flat, Tensor V_flat, double eps)
 {
     // ---- Shape & device checks ------------------------------------------------
     check_float32_contig(probsK_flat, "probsK_flat", 2);
@@ -152,20 +89,19 @@ Tensor rfa_prefix_mean_flat(Tensor probsK_flat, Tensor V_flat, double eps)
             A += static_cast<double>(w); // Read weight and update scalar prefix sum.
 
             // Update vector prefix sum B_d += w * v_d for all d.
-            for (int64_t d = 0; d < D; ++d)
-                B[d] += static_cast<double>(w) * static_cast<double>(v[d]);
-
-            // Normalize to get prefix mean: E_t = B / (A + eps)
             const double inv = 1.0 / (A + eps);
             for (int64_t d = 0; d < D; ++d)
+            {
+                B[d] += static_cast<double>(w) * static_cast<double>(v[d]);
                 e[d] = static_cast<float>(B[d] * inv);
+            }
         }
     }
     return E;
 }
 
 // BACKWARD: returns {grad_probsK_flat, grad_V_flat}
-std::vector<Tensor> rfa_prefix_mean_flat_bw(
+std::vector<Tensor> race_prefix_mean_flat_bw(
     Tensor probsK_flat, // [NS, T]
     Tensor V_flat,      // [NS, T, D]
     Tensor gradE_flat,  // [NS, T, D]
@@ -285,7 +221,6 @@ std::vector<Tensor> rfa_prefix_mean_flat_bw(
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
-    m.def("rfa_prefix_mean_ntsd", &rfa_prefix_mean_ntsd, "RFA prefix mean (probsK[N,T,S], V[N,T,D])");
-    m.def("rfa_prefix_mean_flat", &rfa_prefix_mean_flat, "RFA prefix mean (probsK[NS,T], V[NS,T,D])");
-    m.def("rfa_prefix_mean_flat_bw", &rfa_prefix_mean_flat_bw, "RFA prefix mean backward (flat)");
+    m.def("race_prefix_mean_flat", &race_prefix_mean_flat, "Race prefix mean (probsK[NS,T], V[NS,T,D])");
+    m.def("race_prefix_mean_flat_bw", &race_prefix_mean_flat_bw, "Race prefix mean backward (flat)");
 }

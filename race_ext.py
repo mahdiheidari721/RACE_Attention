@@ -1,4 +1,3 @@
-# race_ext.py
 import os, platform
 from torch.utils.cpp_extension import load
 
@@ -21,7 +20,15 @@ else:
 
 race_pref = load(
     name="race_pref",
-    sources=["/Users/sahiljoshi/Documents/Research/race_pref.cpp"], # Path to the .cpp file
+    sources=[""], # Path to the .cpp file
+    extra_cflags=extra_cflags,
+    extra_ldflags=extra_ldflags,
+    verbose=False,  # keep it quiet once it’s cached
+)
+
+linear_pref = load(
+    name="linear_pref",
+    sources=[""], # Path to the .cpp file
     extra_cflags=extra_cflags,
     extra_ldflags=extra_ldflags,
     verbose=False,  # keep it quiet once it’s cached

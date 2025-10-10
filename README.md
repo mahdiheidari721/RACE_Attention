@@ -14,7 +14,7 @@ We use introduce [RACE](https://dl.acm.org/doi/abs/10.1145/3366423.3380244) Atte
 - vit.py contains the experiment code for image classification tasks.
 - lm.py contains the experiment code for Language Modeling tasks.
 - mlm.py contains the experiment code for Masked Language Modeling tasks.
-- Our custom OpenMP kernel can be found in race_pref.cpp. If you wish to run on CPU, this will be way faster than torch.cumsum.
+- Our custom OpenMP kernel can be found in race_pref.cpp. If you wish to run on CPU, this will be faster than torch.cumsum.
 - You can simply replace any Attention method with our RACEAttention class and test with it.
 
 # Softmax Attention vs. RACE Attention

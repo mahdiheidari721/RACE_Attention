@@ -257,10 +257,9 @@ def train_model_simple(model, train_loader, val_loader, optimizer, device, num_e
         "train_time": train_times, "val_time": val_times,
     }
 
-
 def load_wikitext():
     # 1) Load raw WikiText-103
-    ds = load_dataset("wikitext", "wikitext-2-v1")
+    ds = load_dataset("wikitext", "wikitext-103-raw-v1")
     train_texts = ds["train"]["text"]  # list of lines (blanks/headings included)
     test_texts = ds["test"]["text"]
 
@@ -278,7 +277,7 @@ def load_wikitext():
         train_data,
         batch_size=16,
         max_length=ctx,
-        stride=ctx//2,
+        stride=ctx,
         drop_last=True,
         shuffle=True
     )
@@ -286,7 +285,7 @@ def load_wikitext():
         val_data,
         batch_size=16,
         max_length=ctx,
-        stride=ctx//2,
+        stride=ctx,
         drop_last=True,
         shuffle=True
     )

@@ -26,3 +26,9 @@ We use introduce [RACE](https://dl.acm.org/doi/abs/10.1145/3366423.3380244) Atte
 
 # Intuitive schematic of RACE Attention
 <img width="1988" height="1616" alt="Query attending to keys" src="https://github.com/user-attachments/assets/f91fe505-29ac-4038-b526-30691e8c6ff3" />
+
+# Citation
+
+If you use the code above, please cite
+
+bibtex```@article{joshi2025raceattention, title = {Replacing Softmax Similarity with a Sharpened Angular Similarity: Theory and Practice of Scaling To Billion-Context Attention}, author = {Sahil Joshi and Agniva Chowdhury and Amar Kanakamedala and Ekam Singh and Evan Tu and Anshumali Shrivastava}, journal = {arXiv preprint arXiv:2510.04008}, year = {2025}, url = {https://arxiv.org/abs/2510.04008} }```

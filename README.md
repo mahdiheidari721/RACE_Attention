@@ -29,6 +29,6 @@ We use introduce [RACE](https://dl.acm.org/doi/abs/10.1145/3366423.3380244) Atte
 
 # Citation
 
-If you use the code above, please cite
+If you use the code above, please cite:
 
-bibtex```@article{joshi2025raceattention, title = {Replacing Softmax Similarity with a Sharpened Angular Similarity: Theory and Practice of Scaling To Billion-Context Attention}, author = {Sahil Joshi and Agniva Chowdhury and Amar Kanakamedala and Ekam Singh and Evan Tu and Anshumali Shrivastava}, journal = {arXiv preprint arXiv:2510.04008}, year = {2025}, url = {https://arxiv.org/abs/2510.04008} }```
+```bibtex@article{joshi2025raceattention, title = {Replacing Softmax Similarity with a Sharpened Angular Similarity: Theory and Practice of Scaling To Billion-Context Attention}, author = {Sahil Joshi and Agniva Chowdhury and Amar Kanakamedala and Ekam Singh and Evan Tu and Anshumali Shrivastava}, journal = {arXiv preprint arXiv:2510.04008}, year = {2025}, url = {https://arxiv.org/abs/2510.04008} }```

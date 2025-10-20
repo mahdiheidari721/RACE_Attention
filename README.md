@@ -16,6 +16,7 @@ We use introduce [RACE](https://dl.acm.org/doi/abs/10.1145/3366423.3380244) Atte
 - mlm.py contains the experiment code for Masked Language Modeling tasks.
 - Our custom OpenMP kernel can be found in race_pref.cpp. If you wish to run on CPU, this will be faster than torch.cumsum.
 - You can simply replace any Attention class in a particular Model with our RACEAttention class and test with it.
+- Use the custom Python notebooks to try out our RACE Attention algorithm on different tasks.
 
 # Softmax Attention vs. RACE Attention
 <img width="4685" height="2165" alt="Copy of Comparing Softmax and RACE Attention" src="https://github.com/user-attachments/assets/162cbf2a-5be7-4345-8cec-9ac49ba0e0ab" />

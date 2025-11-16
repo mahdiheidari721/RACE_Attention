@@ -56,8 +56,21 @@ TEXT_CONFIG = {
     "drop_rate": 0.1,
     "qkv_bias": False,
 
-    # You can add your RACE / Performer params here if you want,
-    # they won't affect dataset sizes.
+    # RACE params
+    "K": 2,
+    "L": 2,
+    "M": 1,
+
+    # Performer params
+    "m_features": 256,
+    "favor_seed": None,
+
+    # training
+    "batch_size": 2,
+    "epochs": 100,
+    "lr": 3e-4,
+    "weight_decay": 0.01,
+    "grad_accum_steps": 16,
 }
 
 # ==================================================

@@ -16,7 +16,7 @@ from tqdm import tqdm
 import re
 import random
 from collections import Counter, defaultdict
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import torch
@@ -37,42 +37,27 @@ DATASET_NAME = "ccdv/arxiv-classification"
 TEXT_FIELD   = "text"
 LABEL_FIELD  = "label"
 
-# ---- Target sequence length ----
-SEQ_LEN_TARGET     = 32_000         # model context length (pad/truncate to this)
-MIN_LEN_FOR_TRAIN  = 32_000         # require raw token length >= this
+# ---- Target sequence length and minimum raw length ----
+PACK_TARGET_LEN    = 32_000   # final packed sequence length (context size)
+MIN_DOC_LEN        = 8_000    # min raw length for individual docs used for packing
+PACK_MIN_FRAC      = 0.8      # keep packed seqs >= 0.8 * PACK_TARGET_LEN
 
-DESIRED_TRAIN_TOTAL = 7000          # desired; actual will be smaller
-DESIRED_TEST_TOTAL  = 1000          # desired; actual will be smaller
+# How many docs you'd *like* total (before packing); actual may be smaller
+DESIRED_TRAIN_TOTAL = 7000
+DESIRED_TEST_TOTAL  = 1000
 
-# --------------------------------------------------
-# High-level config
-# --------------------------------------------------
 TEXT_CONFIG = {
-    # data / model
-    "max_len": SEQ_LEN_TARGET,      # 32K context now
+    "max_len": PACK_TARGET_LEN,  # model context length (pad/truncate to this)
     "vocab_limit": 50_000,
     "embed_dim": 256,
-    "num_heads": 4,
+    "num_heads": 4,    # your choice
     "mlp_dim": 1024,
     "num_layers": 4,
     "drop_rate": 0.1,
     "qkv_bias": False,
 
-    # RACE params
-    "K": 2,
-    "L": 2,
-    "M": 1,
-
-    # Performer params
-    "m_features": 256,
-    "favor_seed": None,
-
-    # training
-    "batch_size": 2,
-    "epochs": 100,
-    "lr": 3e-4,
-    "weight_decay": 0.01,
-    "grad_accum_steps": 16,
+    # You can add your RACE / Performer params here if you want,
+    # they won't affect dataset sizes.
 }
 
 # ==================================================
@@ -90,15 +75,18 @@ def basic_english_tokenizer(text: str) -> List[str]:
     text = text.lower()
     tokens = []
     for punc, num, word in _basic_english_re.findall(text):
-        if punc:   tokens.append(punc)
-        elif num:  tokens.append(num)
-        elif word: tokens.append(word)
+        if punc:
+            tokens.append(punc)
+        elif num:
+            tokens.append(num)
+        elif word:
+            tokens.append(word)
     return tokens
 
 tok = basic_english_tokenizer
 
 # ==================================================
-# 2) EDA augmenters (optional)
+# 2) (Optional) EDA augmenters
 # ==================================================
 def eda_random_deletion(tokens, p=0.05):
     if len(tokens) == 1:
@@ -116,16 +104,8 @@ def eda_random_swap(tokens, n_swaps=3):
     return toks
 
 # ==================================================
-# 3) Stats helpers
+# 3) Helper: length stats
 # ==================================================
-def compute_raw_token_lengths(examples):
-    """examples: list[(label, text)]"""
-    lengths = []
-    for lbl, txt in examples:
-        toks = tok(str(txt))
-        lengths.append(len(toks))
-    return np.array(lengths, dtype=np.int32)
-
 def print_length_stats(arr: np.ndarray, name: str, thresholds=()):
     print("--------------------------------------------------")
     print(f"Raw token length stats ({name})")
@@ -143,43 +123,13 @@ def print_length_stats(arr: np.ndarray, name: str, thresholds=()):
         print(f"Frac >= {thr:6d}: {frac:.3f}")
     print()
 
-def compute_effective_lengths_from_loader(dl, num_batches=100):
-    """Use attention masks (non-PAD count) to get effective sequence length."""
-    all_lengths = []
-    for i, (tokens, masks, labels) in enumerate(dl):
-        lens = masks.sum(dim=1).cpu().numpy()
-        all_lengths.append(lens)
-        if i + 1 >= num_batches:
-            break
-    if not all_lengths:
-        return np.array([], dtype=np.int32)
-    return np.concatenate(all_lengths).astype(np.int32)
-
-def print_effective_length_stats(arr: np.ndarray, max_len: int, name: str, thresholds=()):
-    print("--------------------------------------------------")
-    print(f"Effective sequence length stats ({name})")
-    print("--------------------------------------------------")
-    print(f"Count (sampled): {len(arr)}")
-    if len(arr) == 0:
-        print("No data collected.")
-        print()
-        return
-    print(f"Min:             {int(arr.min())}")
-    print(f"Max:             {int(arr.max())}  (max_len = {max_len})")
-    print(f"Mean:            {float(arr.mean()):.1f}")
-    print(f"Median:          {int(np.median(arr))}")
-    for thr in thresholds:
-        frac = float((arr >= thr).mean())
-        print(f"Frac >= {thr:6d}: {frac:.3f}")
-    print()
-
 # ==================================================
-# 4) Length-filtered, class-balanced subset builder
+# 4) Balanced subset with min-length constraint (per doc)
+#    (IDENTICAL behavior to your "good" script)
 # ==================================================
-def make_balanced_long_examples(split, desired_total, min_len, seed=SEED, name="train"):
+def make_balanced_long_examples(split, desired_total, min_len, name="train", seed=SEED):
     """
-    Create a class-balanced subset where each example has
-    raw token length >= min_len.
+    Make a class-balanced subset where each *doc* has raw token length >= min_len.
     Returns:
       examples: list[(label, text)]
       num_classes: int
@@ -191,36 +141,44 @@ def make_balanced_long_examples(split, desired_total, min_len, seed=SEED, name="
     print(f"Original {name} split size: {len(labels)}")
 
     # Precompute lengths
+    print(f"Tokenizing {name} split to compute lengths...")
     lengths = []
     for txt in texts:
         toks = tok(str(txt))
         lengths.append(len(toks))
     lengths = np.array(lengths, dtype=np.int32)
 
-    # Bucket long examples by class
+    # Bucket by class, keeping only long docs
     buckets = defaultdict(list)
     for idx, (y, L) in enumerate(zip(labels, lengths)):
+        y_int = int(y)
         if L >= min_len:
-            buckets[int(y)].append(idx)
+            buckets[y_int].append(idx)
 
     num_classes = len(buckets)
     if num_classes == 0:
-        raise ValueError(f"No examples meet min_len={min_len} in {name} split!")
+        raise ValueError(f"No examples meet min_len = {min_len} in {name} split!")
 
     print(f"Found {num_classes} classes with at least one example >= min_len.")
     for y in sorted(buckets.keys()):
         print(f"  Class {y}: {len(buckets[y])} examples >= {min_len}")
 
-    # per-class limit
+    # Compute per-class quota
     max_possible_per_class = min(len(idxs) for idxs in buckets.values())
     desired_per_class      = desired_total // num_classes
     per_class              = min(max_possible_per_class, desired_per_class)
-    actual_total           = per_class * num_classes
 
+    if per_class == 0:
+        raise ValueError(
+            f"min_len = {min_len} is too strict: at least one class has 0 long examples."
+        )
+
+    actual_total = per_class * num_classes
     print(f"\nDesired total {name} examples: {desired_total}")
     print(f"Max possible per class (given min_len): {max_possible_per_class}")
     print(f"Using per_class = {per_class}, so actual total = {actual_total}")
 
+    # Sample per class
     rng = random.Random(seed)
     chosen_idx = []
     for y, idxs in buckets.items():
@@ -230,91 +188,91 @@ def make_balanced_long_examples(split, desired_total, min_len, seed=SEED, name="
 
     examples = [(int(labels[i]), texts[i]) for i in chosen_idx]
 
-    # Raw stats for this final subset
-    chosen_lengths = lengths[chosen_idx]
+    # Stats for the final subset of docs
+    final_lengths = lengths[chosen_idx]
     print_length_stats(
-        chosen_lengths,
-        name=f"{name} (balanced, length-filtered)",
-        thresholds=(min_len, TEXT_CONFIG["max_len"]),
+        final_lengths,
+        f"{name} docs (balanced, length-filtered)",
+        thresholds=(min_len,),
     )
 
     return examples, num_classes
 
 # ==================================================
-# 5) Load raw dataset and build long subsets
+# 5) Streaming packer: use all tokens up to 32k chunks
+#    (IDENTICAL behavior to your "good" script)
 # ==================================================
-raw = load_dataset(DATASET_NAME)
-
-# pick train / test split
-if "validation" in raw:
-    train_split = raw["train"]
-    test_split  = raw["validation"]
-elif "test" in raw:
-    train_split = raw["train"]
-    test_split  = raw["test"]
-else:
-    tmp = raw["train"].train_test_split(test_size=0.2, seed=SEED)
-    train_split, test_split = tmp["train"], tmp["test"]
-
-train_examples, num_classes_train = make_balanced_long_examples(
-    train_split,
-    desired_total=DESIRED_TRAIN_TOTAL,
-    min_len=MIN_LEN_FOR_TRAIN,
+def pack_examples_streaming(
+    examples,
+    target_len=PACK_TARGET_LEN,
+    min_frac=PACK_MIN_FRAC,
     seed=SEED,
-    name="train",
-)
-test_examples,  num_classes_test  = make_balanced_long_examples(
-    test_split,
-    desired_total=DESIRED_TEST_TOTAL,
-    min_len=MIN_LEN_FOR_TRAIN,
-    seed=SEED,
-    name="test",
-)
+):
+    """
+    Streaming packer that:
+      - groups docs by label
+      - iterates through docs per class, tokenizing and appending into a buffer
+      - emits a packed example every time buffer hits target_len
+      - emits a final partial example if it's >= min_frac * target_len
 
-assert num_classes_train == num_classes_test
-num_classes = num_classes_train
+    This reuses residual tokens from long docs rather than discarding them.
+    """
+    rng = random.Random(seed)
+    per_class_docs = defaultdict(list)
 
-# Extra raw-length stats directly from examples:
-train_lengths = compute_raw_token_lengths(train_examples)
-test_lengths  = compute_raw_token_lengths(test_examples)
-print_length_stats(
-    train_lengths,
-    name="train_examples (recomputed)",
-    thresholds=(MIN_LEN_FOR_TRAIN, TEXT_CONFIG["max_len"]),
-)
-print_length_stats(
-    test_lengths,
-    name="test_examples (recomputed)",
-    thresholds=(MIN_LEN_FOR_TRAIN, TEXT_CONFIG["max_len"]),
-)
+    for lbl, txt in examples:
+        per_class_docs[int(lbl)].append(str(txt))
+
+    new_examples = []
+
+    for lbl, docs in per_class_docs.items():
+        # Shuffle docs within class to randomize packing
+        rng.shuffle(docs)
+
+        cur_tokens = []
+        for txt in docs:
+            toks = tok(txt)
+            j = 0
+            n = len(toks)
+            while j < n:
+                remaining_space = target_len - len(cur_tokens)
+                if remaining_space <= 0:
+                    # Buffer full → emit
+                    if len(cur_tokens) >= int(min_frac * target_len):
+                        new_examples.append((lbl, " ".join(cur_tokens)))
+                    cur_tokens = []
+                    remaining_space = target_len
+
+                take = min(remaining_space, n - j)
+                if take <= 0:
+                    break
+
+                cur_tokens.extend(toks[j : j + take])
+                j += take
+
+                if len(cur_tokens) == target_len:
+                    # Emit full packed sequence
+                    new_examples.append((lbl, " ".join(cur_tokens)))
+                    cur_tokens = []
+
+        # End of docs for this class: flush leftover if big enough
+        if len(cur_tokens) >= int(min_frac * target_len):
+            new_examples.append((lbl, " ".join(cur_tokens)))
+        # else: drop tiny tail
+
+    return new_examples
 
 # ==================================================
-# 6) Build vocab from (balanced, long) train texts
-# ==================================================
-counter = Counter()
-for lbl, txt in train_examples:
-    counter.update(tok(str(txt)))
-
-most_common = [w for w,_ in counter.most_common(TEXT_CONFIG["vocab_limit"])]
-stoi = {w: i+2 for i, w in enumerate(most_common)}
-stoi["<pad>"] = 0
-stoi["<unk>"] = 1
-PAD_IDX, UNK_IDX = 0, 1
-VOCAB_SIZE = len(stoi)
-TEXT_CONFIG["vocab_size"]   = VOCAB_SIZE
-TEXT_CONFIG["num_classes"]  = num_classes
-
-print(f"Vocab size: {VOCAB_SIZE}, num_classes: {num_classes}")
-print(f"Balanced LONG train examples: {len(train_examples)}, test examples: {len(test_examples)}")
-
-# ==================================================
-# 7) Dataset for 32K sequences
+# 6) Dataset class (same as "good" script)
 # ==================================================
 class ArxivDataset(Dataset):
-    def __init__(self, examples, max_len, augment=False):
+    def __init__(self, examples, max_len, stoi, pad_idx=0, unk_idx=1, augment=False):
         self.examples = examples
         self.max_len  = max_len
         self.augment  = augment
+        self.stoi     = stoi
+        self.pad_idx  = pad_idx
+        self.unk_idx  = unk_idx
 
     def __len__(self):
         return len(self.examples)
@@ -331,22 +289,170 @@ class ArxivDataset(Dataset):
                 toks = eda_random_swap(toks)
 
         toks = toks[: self.max_len]
-        ids  = [stoi.get(t, UNK_IDX) for t in toks]
+        ids  = [self.stoi.get(t, self.unk_idx) for t in toks]
         if len(ids) < self.max_len:
-            ids += [PAD_IDX] * (self.max_len - len(ids))
-        return lbl, torch.tensor(ids, dtype=torch.long)
+            ids += [self.pad_idx] * (self.max_len - len(ids))
+        return int(lbl), torch.tensor(ids, dtype=torch.long)
 
     def collate_fn(self, batch):
         labels, tokens = zip(*batch)
         tokens = torch.stack(tokens, dim=0)
-        masks  = (tokens != PAD_IDX).long()
+        masks  = (tokens != self.pad_idx).long()
         return tokens, masks, torch.tensor(labels, dtype=torch.long)
 
-max_len  = TEXT_CONFIG["max_len"]   # 32_000 now
-batch_sz = TEXT_CONFIG["batch_size"]
+# ==================================================
+# 7) Effective length stats from DataLoader masks
+# ==================================================
+def compute_effective_lengths_from_loader(dl, num_batches=100):
+    all_lengths = []
+    for i, (tokens, masks, labels) in enumerate(dl):
+        lens = masks.sum(dim=1).cpu().numpy()
+        all_lengths.append(lens)
+        if i + 1 >= num_batches:
+            break
+    if not all_lengths:
+        return np.array([], dtype=np.int32)
+    return np.concatenate(all_lengths).astype(np.int32)
 
-train_ds = ArxivDataset(train_examples, max_len, augment=True)
-test_ds  = ArxivDataset(test_examples,  max_len, augment=False)
+def print_effective_length_stats(arr: np.ndarray, max_len: int, thresholds=()):
+    print("--------------------------------------------------")
+    print("Effective sequence length stats (after padding/truncation)")
+    print("--------------------------------------------------")
+    print(f"Count (sampled): {len(arr)}")
+    if len(arr) == 0:
+        print("No data collected from DataLoader.")
+        return
+    print(f"Min:             {int(arr.min())}")
+    print(f"Max:             {int(arr.max())}  (max_len = {max_len})")
+    print(f"Mean:            {float(arr.mean()):.1f}")
+    print(f"Median:          {int(np.median(arr))}")
+    for thr in thresholds:
+        frac = float((arr >= thr).mean())
+        print(f"Frac >= {thr:6d}: {frac:.3f}")
+    print()
+
+print("Loading dataset:", DATASET_NAME)
+raw = load_dataset(DATASET_NAME)
+
+if "validation" in raw:
+    train_split = raw["train"]
+    test_split  = raw["validation"]
+elif "test" in raw:
+    train_split = raw["train"]
+    test_split  = raw["test"]
+else:
+    tmp = raw["train"].train_test_split(test_size=0.2, seed=SEED)
+    train_split, test_split = tmp["train"], tmp["test"]
+
+# -----------------------------------------------
+# 8.1) Build balanced, long-doc subsets (>= MIN_DOC_LEN)
+# -----------------------------------------------
+train_docs, num_classes_train = make_balanced_long_examples(
+    train_split,
+    desired_total=DESIRED_TRAIN_TOTAL,
+    min_len=MIN_DOC_LEN,
+    name="train",
+    seed=SEED,
+)
+test_docs, num_classes_test = make_balanced_long_examples(
+    test_split,
+    desired_total=DESIRED_TEST_TOTAL,
+    min_len=MIN_DOC_LEN,
+    name="test",
+    seed=SEED,
+)
+
+assert num_classes_train == num_classes_test
+num_classes = num_classes_train
+
+print(f"Final balanced-long train docs (>= {MIN_DOC_LEN}): {len(train_docs)}")
+print(f"Final balanced-long test docs  (>= {MIN_DOC_LEN}): {len(test_docs)}")
+print(f"Num classes: {num_classes}\n")
+
+# -----------------------------------------------
+# 8.2) STREAMING: pack docs into ~32k sequences per class
+# -----------------------------------------------
+print(f"Streaming-pack long docs into ~{PACK_TARGET_LEN} token sequences...")
+train_examples_packed = pack_examples_streaming(
+    train_docs,
+    target_len=PACK_TARGET_LEN,
+    min_frac=PACK_MIN_FRAC,
+    seed=SEED,
+)
+test_examples_packed = pack_examples_streaming(
+    test_docs,
+    target_len=PACK_TARGET_LEN,
+    min_frac=PACK_MIN_FRAC,
+    seed=SEED + 1,
+)
+
+print(f"Packed train size (~{PACK_TARGET_LEN}): {len(train_examples_packed)}")
+print(f"Packed test size  (~{PACK_TARGET_LEN}): {len(test_examples_packed)}\n")
+
+# Stats on packed sequences (raw token counts)
+def packed_lengths(examples):
+    return np.array([len(tok(str(txt))) for _, txt in examples], dtype=np.int32)
+
+train_packed_lengths = packed_lengths(train_examples_packed)
+test_packed_lengths  = packed_lengths(test_examples_packed)
+
+print_length_stats(
+    train_packed_lengths,
+    name="train_packed (~32k)",
+    thresholds=(int(PACK_MIN_FRAC * PACK_TARGET_LEN), PACK_TARGET_LEN),
+)
+print_length_stats(
+    test_packed_lengths,
+    name="test_packed (~32k)",
+    thresholds=(int(PACK_MIN_FRAC * PACK_TARGET_LEN), PACK_TARGET_LEN),
+)
+
+# Use packed examples from here on
+train_examples = train_examples_packed
+test_examples  = test_examples_packed
+
+# -----------------------------------------------
+# 8.3) Build vocab from packed train examples
+# -----------------------------------------------
+print("Building vocabulary from packed train examples...")
+counter = Counter()
+for lbl, txt in train_examples:
+    counter.update(tok(str(txt)))
+
+most_common = [w for w, _ in counter.most_common(TEXT_CONFIG["vocab_limit"])]
+stoi = {w: i + 2 for i, w in enumerate(most_common)}
+stoi["<pad>"] = 0
+stoi["<unk>"] = 1
+
+PAD_IDX, UNK_IDX = 0, 1
+VOCAB_SIZE = len(stoi)
+TEXT_CONFIG["vocab_size"]  = VOCAB_SIZE
+TEXT_CONFIG["num_classes"] = num_classes
+
+print(f"Vocab size: {VOCAB_SIZE}\n")
+
+# -----------------------------------------------
+# 8.4) Create datasets / loaders at 32k
+# -----------------------------------------------
+max_len  = TEXT_CONFIG["max_len"]  # 32_000
+batch_sz = 2  # super long sequences → small batch
+
+train_ds = ArxivDataset(
+    train_examples,
+    max_len=max_len,
+    stoi=stoi,
+    pad_idx=PAD_IDX,
+    unk_idx=UNK_IDX,
+    augment=True,
+)
+test_ds = ArxivDataset(
+    test_examples,
+    max_len=max_len,
+    stoi=stoi,
+    pad_idx=PAD_IDX,
+    unk_idx=UNK_IDX,
+    augment=False,
+)
 
 train_dl = DataLoader(
     train_ds,
@@ -357,7 +463,6 @@ train_dl = DataLoader(
     num_workers=4,
     collate_fn=train_ds.collate_fn,
 )
-
 test_dl = DataLoader(
     test_ds,
     batch_size=batch_sz,
@@ -367,21 +472,23 @@ test_dl = DataLoader(
     collate_fn=test_ds.collate_fn,
 )
 
-print(f"Train batches: {len(train_dl)}, Test batches: {len(test_dl)}")
+print(f"Train batches: {len(train_dl)}")
+print(f"Test  batches: {len(test_dl)}\n")
 
-# ==================================================
-# 8) Effective length stats from DataLoader
-# ==================================================
-train_eff_lengths = compute_effective_lengths_from_loader(
+# -----------------------------------------------
+# 8.5) Effective length stats from DataLoader
+# -----------------------------------------------
+eff_lengths = compute_effective_lengths_from_loader(
     train_dl,
-    num_batches=100,   # sample first 100 batches
+    num_batches=100,  # sample
 )
 print_effective_length_stats(
-    train_eff_lengths,
+    eff_lengths,
     max_len=max_len,
-    name="train_dl (sampled)",
-    thresholds=(int(0.8 * max_len), max_len),
+    thresholds=(int(PACK_MIN_FRAC * max_len), max_len),
 )
+
+print("Done. Packed sequences are ~32k tokens long with minimal padding.")
 
 
 # ==================================================

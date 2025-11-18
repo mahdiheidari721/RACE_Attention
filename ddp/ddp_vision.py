@@ -77,6 +77,8 @@ def main():
     train_loader, val_loader, info = get_data_food101(
         batch_size=VISION_CONFIG["batch_size"],
         img_size=VISION_CONFIG["img_size"],
+        IMNET_MEAN = [0.485, 0.456, 0.406],
+        IMNET_STD  = [0.229, 0.224, 0.225],
         distributed=True,
     )
 

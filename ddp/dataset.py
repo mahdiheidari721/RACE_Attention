@@ -1,3 +1,4 @@
+# torchrun --standalone --nproc_per_node=2 ddp_vision.py
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import torch 
@@ -67,8 +68,10 @@ def get_data_food101(
     img_size=512,
     num_workers=8,
     seed=0,
+    IMNET_MEAN=[],
+    IMNET_STD=[],
     root="./data",
-    distributed = True
+    distributed = True,
 ):
     # Transforms (RGB @ img_size x img_size)
     train_tf = transforms.Compose([
@@ -100,12 +103,12 @@ def get_data_food101(
 
     # --- sample 7,520 train examples across these 50 classes ---
     train_idx = _balanced_subset_fixed_total(
-        ds_train_full, class_ids=class_ids_50, total=1000, seed=seed
+        ds_train_full, class_ids=class_ids_50, total=5500, seed=seed
     )
 
     # --- sample 2,500 test examples across the same 50 classes ---
     test_idx = _balanced_subset_fixed_total(
-        ds_test_full, class_ids=class_ids_50, total=100, seed=seed
+        ds_test_full, class_ids=class_ids_50, total=1500, seed=seed
     )
 
     ds_train = Subset(ds_train_full, train_idx)

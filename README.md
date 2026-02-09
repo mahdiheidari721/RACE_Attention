@@ -15,12 +15,6 @@ We use introduce [RACE](https://dl.acm.org/doi/abs/10.1145/3366423.3380244) Atte
 # Softmax Attention vs. RACE Attention
 <img width="4685" height="2165" alt="Copy of Comparing Softmax and RACE Attention" src="https://github.com/user-attachments/assets/162cbf2a-5be7-4345-8cec-9ac49ba0e0ab" />
 
-# Complete Workflow of RACE Attention Algorithm
-<img width="3724" height="2488" alt="Detailed Flowchart" src="https://github.com/user-attachments/assets/105fd090-9f79-4c3a-8244-cd6fb5d2c19c" />
-
-# Intuitive schematic of RACE Attention
-<img width="1988" height="1616" alt="Query attending to keys" src="https://github.com/user-attachments/assets/f91fe505-29ac-4038-b526-30691e8c6ff3" />
-
 # Citation
 
 If you use the code above, please cite:

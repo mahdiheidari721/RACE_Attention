@@ -5,8 +5,8 @@ We use introduce [RACE](https://dl.acm.org/doi/abs/10.1145/3366423.3380244) Atte
 - A linear time and memory attention implementation that approximates the exponentiated angular kernel.
 - Drop-in for Softmax Attention during pre-training for diverse tasks.
 - Achieves competetive accuracy as other Linear Attenion baselines and quadratic FlashAttention.
-- Scales to 75 million tokens on Intel Xeon® Gold 5220R CPU and to 12 million tokens on NVVIDA GH200 (96GB) GPU when using 1 layer of multihead attention.
-- For more information read the [Pre-print](https://arxiv.org/pdf/2510.04008).
+- Scales to 75 million tokens on Intel Xeon® Gold 5220R CPU and to 12 million tokens on NVVIDA GH200 (96GB) GPU when using a single layer of multihead attention.
+- For more information read the [Paper](https://arxiv.org/pdf/2510.04008).
 
 # User-Guide
 

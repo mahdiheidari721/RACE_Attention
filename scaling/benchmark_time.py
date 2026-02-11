@@ -108,7 +108,7 @@ class BatchedACE(nn.Module):
         M, B, T, H, dk = Khf.shape
         assert M == self.M and dk == self.d_k
         S = self.L * self.R
-        scale = self.logit_temp.exp().clamp(1e-2, 10.0) # uncomment when you make temp learnable
+        scale = self.logit_temp.exp().clamp(1e-2, 10.0)
 
         if self.share_planes:
             # Collapse M·B·H → N

@@ -13,7 +13,8 @@ We use introduce [RACE](https://dl.acm.org/doi/abs/10.1145/3366423.3380244) Atte
 - Use the custom Python notebooks to try out our RACE Attention algorithm on different tasks.
 
 # Softmax Attention vs. RACE Attention
-<img width="4685" height="2165" alt="Copy of Comparing Softmax and RACE Attention" src="https://github.com/user-attachments/assets/162cbf2a-5be7-4345-8cec-9ac49ba0e0ab" />
+<img width="5130" height="2305" alt="Comparing Softmax and RACE Attention" src="https://github.com/user-attachments/assets/f4b3a169-0231-45b8-8d7f-e34d51aaf2ee" />
+
 
 # Citation
 

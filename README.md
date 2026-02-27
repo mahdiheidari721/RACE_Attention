@@ -37,7 +37,6 @@ RACE Attention introduces a randomized formulation of attention that replaces de
   – Single attention layer evaluated in a forward–backward pass  
   – Processes up to **12M tokens** on an NVIDIA GH200 (96GB) GPU  
   – Processes up to **75M tokens** on an Intel Xeon® Gold 5220R CPU  
-  – Exceeds practical limits of current state-of-the-art attention implementations
 - 🧠 Theoretically grounded randomized attention mechanism
 ---
 

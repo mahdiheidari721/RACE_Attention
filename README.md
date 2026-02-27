@@ -55,10 +55,10 @@ These notebooks provide end-to-end training examples across multiple domains usi
 
 | Notebook | Task | Dataset | Seq Len |
 |---|---|---|:---:|
-| `ClassificationTask.ipynb` | Text classification | AG News | 512 |
-| `LanguageModelling.ipynb` | Autoregressive language modeling | WikiText-2 | 128 |
+| `ClassificationTask.ipynb` | Text classification | IMDB | 512 |
+| `LanguageModelling.ipynb` | Autoregressive language modeling | WikiText-103 | 128 |
 | `MaskedLanguageModelling.ipynb` | Masked language modeling | TinyStories (BERT-style) | 512 |
-| `VisionTask.ipynb` | Image classification (ViT) | MNIST | 784 |
+| `VisionTask.ipynb` | Image classification (ViT) | FashionMNIST | 784 |
 
 The notebooks demonstrate how to:
 

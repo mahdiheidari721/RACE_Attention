@@ -54,7 +54,7 @@ notebooks/
 
 These notebooks provide end-to-end training examples across multiple domains using smaller datasets and moderate sequence lengths, intended as illustrative examples rather than full-scale experimental runs.
 
-| Notebook | Task | Dataset | Seq. Length |
+| Notebook | Task | Dataset | Seq Len |
 |---|---|---|:---:|
 | `ClassificationTask.ipynb` | Text classification | AG News | 512 |
 | `LanguageModelling.ipynb` | Autoregressive language modeling | WikiText-2 | 128 |

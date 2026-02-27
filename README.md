@@ -33,9 +33,11 @@ RACE Attention introduces a randomized formulation of attention that replaces de
 - ⚡ **Strictly linear-time attention in sequence length**
 - 🔁 Drop-in replacement for Softmax Attention
 - 🎯 Competitive accuracy with FlashAttention and linear attention baselines
-- 📈 Scales to:  
-  \- **75M tokens** on Intel Xeon® Gold 5220R CPU  
-  \- **12M tokens** on NVIDIA GH200 (96GB) GPU
+- 📈 **Demonstrated scalability:**  
+  – Single attention layer evaluated in a forward–backward pass  
+  – Processes up to **12M tokens** on an NVIDIA GH200 (96GB) GPU  
+  – Processes up to **75M tokens** on an Intel Xeon® Gold 5220R CPU  
+  – Exceeds practical limits of current state-of-the-art attention implementations
 - 🧠 Theoretically grounded randomized attention mechanism
 ---
 
@@ -50,14 +52,14 @@ Example notebooks demonstrating RACE Attention are located in:
 notebooks/
 ```
 
-These notebooks provide end-to-end training examples across multiple domains:
+These notebooks provide end-to-end training examples across multiple domains using smaller datasets and moderate sequence lengths, intended as illustrative examples rather than full-scale experimental runs.
 
-| Notebook | Task |
-|---|---|
-| `ClassificationTask.ipynb` | Long-sequence text classification |
-| `LanguageModelling.ipynb` | Autoregressive language modeling |
-| `MaskedLanguageModelling.ipynb` | BERT-style masked language modeling |
-| `VisionTask.ipynb` | Vision Transformer training |
+| Notebook | Task | Dataset | Sequence Length |
+|---|---|---|---|
+| `ClassificationTask.ipynb` | Text classification | AG News | 512 |
+| `LanguageModelling.ipynb` | Autoregressive language modeling | WikiText-2 | 128 |
+| `MaskedLanguageModelling.ipynb` | Masked language modeling | TinyStories (BERT-style) | 512 |
+| `VisionTask.ipynb` | Image classification (ViT) | MNIST | 784 |
 
 The notebooks demonstrate how to:
 

@@ -39,9 +39,8 @@ RACE Attention introduces a randomized formulation of attention that replaces de
 - 🧠 Theoretically grounded randomized attention mechanism
 ---
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/f4b3a169-0231-45b8-8d7f-e34d51aaf2ee" width="900">
-</p>
+<img width="4404" height="1808" alt="Comparing_Softmax_and_RACE_Attention" src="https://github.com/user-attachments/assets/e39986a3-c95b-4075-b53c-524a5ab79c56" />
+
 
 ## Quick Start
 

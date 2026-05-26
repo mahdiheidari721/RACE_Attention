@@ -1,0 +1,472 @@
+Epochs: 1
+------------------------------------------------------------------------
+Ep  1 | train_loss 3.6361, acc 0.0408 (104.9s) | val_loss 3.5104, acc 0.0531 (32.1s) | lr -5.263e-06 | updates 115/115
+------------------------------------------------------------------------
+Log saved to: /mnt/drive7/projects/my_project/RACE_Attention/trial_exact_flash_K2_L5_M1_VIT.txt
+Epochs: 150
+------------------------------------------------------------------------
+Ep  1 | train_loss 3.6323, acc 0.0454 (105.0s) | val_loss 3.6056, acc 0.0542 (32.1s) | lr 4.047e-04 | updates 115/17250
+Ep  2 | train_loss 3.5658, acc 0.0576 (105.0s) | val_loss 3.5018, acc 0.0687 (32.1s) | lr 5.979e-04 | updates 230/17250
+Ep  3 | train_loss 3.4933, acc 0.0639 (104.9s) | val_loss 3.4355, acc 0.0720 (32.1s) | lr 5.939e-04 | updates 345/17250
+Ep  4 | train_loss 3.4171, acc 0.0821 (104.8s) | val_loss 3.4048, acc 0.0867 (32.1s) | lr 5.898e-04 | updates 460/17250
+Ep  5 | train_loss 3.3576, acc 0.0946 (104.9s) | val_loss 3.3249, acc 0.1041 (32.1s) | lr 5.858e-04 | updates 575/17250
+Ep  6 | train_loss 3.2907, acc 0.1071 (104.9s) | val_loss 3.4072, acc 0.0785 (32.1s) | lr 5.818e-04 | updates 690/17250
+Ep  7 | train_loss 3.2494, acc 0.1136 (104.9s) | val_loss 3.2912, acc 0.1063 (32.1s) | lr 5.777e-04 | updates 805/17250
+Ep  8 | train_loss 3.2309, acc 0.1293 (104.8s) | val_loss 3.3176, acc 0.1120 (32.0s) | lr 5.737e-04 | updates 920/17250
+Ep  9 | train_loss 3.1837, acc 0.1380 (104.8s) | val_loss 3.2970, acc 0.1186 (32.0s) | lr 5.696e-04 | updates 1035/17250
+Ep 10 | train_loss 3.1417, acc 0.1446 (104.8s) | val_loss 3.3434, acc 0.1068 (32.0s) | lr 5.656e-04 | updates 1150/17250
+Ep 11 | train_loss 3.0830, acc 0.1652 (104.8s) | val_loss 3.4139, acc 0.1224 (32.0s) | lr 5.616e-04 | updates 1265/17250
+Ep 12 | train_loss 3.0519, acc 0.1617 (104.8s) | val_loss 3.1646, acc 0.1295 (32.0s) | lr 5.575e-04 | updates 1380/17250
+Ep 13 | train_loss 2.9999, acc 0.1731 (104.8s) | val_loss 3.1376, acc 0.1469 (32.1s) | lr 5.535e-04 | updates 1495/17250
+Ep 14 | train_loss 2.9511, acc 0.1880 (104.8s) | val_loss 3.1770, acc 0.1488 (32.0s) | lr 5.494e-04 | updates 1610/17250
+Ep 15 | train_loss 2.9159, acc 0.1986 (104.8s) | val_loss 3.1553, acc 0.1442 (32.1s) | lr 5.454e-04 | updates 1725/17250
+Ep 16 | train_loss 2.8852, acc 0.2035 (104.9s) | val_loss 3.1680, acc 0.1510 (32.0s) | lr 5.414e-04 | updates 1840/17250
+Ep 17 | train_loss 2.8617, acc 0.2062 (104.8s) | val_loss 3.1211, acc 0.1472 (32.1s) | lr 5.373e-04 | updates 1955/17250
+Ep 18 | train_loss 2.8261, acc 0.2209 (104.8s) | val_loss 3.0639, acc 0.1578 (32.0s) | lr 5.333e-04 | updates 2070/17250
+Ep 19 | train_loss 2.8064, acc 0.2239 (104.8s) | val_loss 3.2417, acc 0.1442 (32.1s) | lr 5.292e-04 | updates 2185/17250
+Ep 20 | train_loss 2.7742, acc 0.2255 (104.8s) | val_loss 3.0100, acc 0.1720 (32.0s) | lr 5.252e-04 | updates 2300/17250
+Ep 21 | train_loss 2.7452, acc 0.2299 (104.8s) | val_loss 3.0591, acc 0.1837 (32.0s) | lr 5.212e-04 | updates 2415/17250
+Ep 22 | train_loss 2.7039, acc 0.2367 (104.8s) | val_loss 3.0605, acc 0.1908 (32.0s) | lr 5.171e-04 | updates 2530/17250
+Ep 23 | train_loss 2.6507, acc 0.2584 (104.8s) | val_loss 3.1931, acc 0.1619 (32.0s) | lr 5.131e-04 | updates 2645/17250
+Ep 24 | train_loss 2.6323, acc 0.2579 (104.8s) | val_loss 3.0737, acc 0.1832 (32.0s) | lr 5.090e-04 | updates 2760/17250
+Ep 25 | train_loss 2.6384, acc 0.2505 (104.8s) | val_loss 3.0604, acc 0.1807 (32.0s) | lr 5.050e-04 | updates 2875/17250
+Ep 26 | train_loss 2.6143, acc 0.2614 (104.8s) | val_loss 3.0608, acc 0.1922 (32.1s) | lr 5.010e-04 | updates 2990/17250
+Ep 27 | train_loss 2.6041, acc 0.2742 (104.8s) | val_loss 3.0183, acc 0.1916 (32.1s) | lr 4.969e-04 | updates 3105/17250
+Ep 28 | train_loss 2.5342, acc 0.2774 (104.9s) | val_loss 3.0025, acc 0.2003 (32.1s) | lr 4.929e-04 | updates 3220/17250
+Ep 29 | train_loss 2.4953, acc 0.2875 (104.8s) | val_loss 2.9629, acc 0.2017 (32.1s) | lr 4.888e-04 | updates 3335/17250
+Ep 30 | train_loss 2.4711, acc 0.3005 (104.8s) | val_loss 3.0199, acc 0.1916 (32.1s) | lr 4.848e-04 | updates 3450/17250
+Ep 31 | train_loss 2.4632, acc 0.3057 (104.9s) | val_loss 3.0018, acc 0.1897 (32.1s) | lr 4.808e-04 | updates 3565/17250
+Ep 32 | train_loss 2.4041, acc 0.3144 (104.8s) | val_loss 2.9868, acc 0.1962 (32.1s) | lr 4.767e-04 | updates 3680/17250
+Ep 33 | train_loss 2.3970, acc 0.3261 (104.8s) | val_loss 2.9991, acc 0.2033 (32.0s) | lr 4.727e-04 | updates 3795/17250
+Ep 34 | train_loss 2.3491, acc 0.3351 (104.8s) | val_loss 2.9352, acc 0.2159 (32.0s) | lr 4.686e-04 | updates 3910/17250
+Ep 35 | train_loss 2.3125, acc 0.3454 (104.8s) | val_loss 2.9371, acc 0.2200 (32.0s) | lr 4.646e-04 | updates 4025/17250
+Ep 36 | train_loss 2.2929, acc 0.3443 (104.9s) | val_loss 2.9598, acc 0.2224 (32.1s) | lr 4.606e-04 | updates 4140/17250
+Ep 37 | train_loss 2.2386, acc 0.3554 (104.9s) | val_loss 3.0283, acc 0.2120 (32.1s) | lr 4.565e-04 | updates 4255/17250
+Ep 38 | train_loss 2.2131, acc 0.3688 (104.8s) | val_loss 2.9754, acc 0.2232 (32.1s) | lr 4.525e-04 | updates 4370/17250
+Ep 39 | train_loss 2.1825, acc 0.3698 (104.9s) | val_loss 3.0722, acc 0.2281 (32.1s) | lr 4.484e-04 | updates 4485/17250
+Ep 40 | train_loss 2.1257, acc 0.3889 (104.8s) | val_loss 3.0184, acc 0.2219 (32.1s) | lr 4.444e-04 | updates 4600/17250
+Ep 41 | train_loss 2.0752, acc 0.4000 (104.9s) | val_loss 3.0152, acc 0.2262 (32.1s) | lr 4.404e-04 | updates 4715/17250
+Ep 42 | train_loss 2.0488, acc 0.4054 (104.8s) | val_loss 3.0691, acc 0.2249 (32.1s) | lr 4.363e-04 | updates 4830/17250
+Ep 43 | train_loss 1.9997, acc 0.4139 (104.9s) | val_loss 3.0274, acc 0.2262 (32.0s) | lr 4.323e-04 | updates 4945/17250
+Ep 44 | train_loss 1.9937, acc 0.4207 (104.9s) | val_loss 3.0645, acc 0.2175 (32.0s) | lr 4.282e-04 | updates 5060/17250
+Ep 45 | train_loss 1.9480, acc 0.4310 (104.9s) | val_loss 3.1040, acc 0.2202 (32.1s) | lr 4.242e-04 | updates 5175/17250
+Ep 46 | train_loss 1.8867, acc 0.4454 (104.8s) | val_loss 3.0240, acc 0.2341 (32.1s) | lr 4.202e-04 | updates 5290/17250
+Ep 47 | train_loss 1.8323, acc 0.4666 (104.9s) | val_loss 3.1368, acc 0.2333 (32.2s) | lr 4.161e-04 | updates 5405/17250
+Ep 48 | train_loss 1.7821, acc 0.4899 (104.9s) | val_loss 3.0949, acc 0.2401 (32.2s) | lr 4.121e-04 | updates 5520/17250
+Ep 49 | train_loss 1.7454, acc 0.4845 (105.0s) | val_loss 3.1177, acc 0.2309 (32.1s) | lr 4.080e-04 | updates 5635/17250
+Ep 50 | train_loss 1.7073, acc 0.5049 (104.8s) | val_loss 3.2421, acc 0.2303 (32.1s) | lr 4.040e-04 | updates 5750/17250
+Ep 51 | train_loss 1.6939, acc 0.5079 (104.9s) | val_loss 3.1942, acc 0.2358 (32.1s) | lr 4.000e-04 | updates 5865/17250
+Ep 52 | train_loss 1.6531, acc 0.5179 (104.9s) | val_loss 3.1622, acc 0.2388 (32.0s) | lr 3.959e-04 | updates 5980/17250
+Ep 53 | train_loss 1.5902, acc 0.5323 (104.8s) | val_loss 3.2263, acc 0.2289 (32.1s) | lr 3.919e-04 | updates 6095/17250
+Ep 54 | train_loss 1.5681, acc 0.5522 (104.8s) | val_loss 3.3195, acc 0.2189 (32.1s) | lr 3.878e-04 | updates 6210/17250
+Ep 55 | train_loss 1.5559, acc 0.5424 (104.9s) | val_loss 3.2530, acc 0.2279 (32.1s) | lr 3.838e-04 | updates 6325/17250
+Ep 56 | train_loss 1.4860, acc 0.5636 (104.9s) | val_loss 3.2973, acc 0.2341 (32.1s) | lr 3.798e-04 | updates 6440/17250
+Ep 57 | train_loss 1.4608, acc 0.5813 (104.9s) | val_loss 3.2798, acc 0.2374 (32.1s) | lr 3.757e-04 | updates 6555/17250
+Ep 58 | train_loss 1.4120, acc 0.5976 (104.9s) | val_loss 3.3989, acc 0.2420 (32.1s) | lr 3.717e-04 | updates 6670/17250
+Ep 59 | train_loss 1.3995, acc 0.5861 (104.9s) | val_loss 3.3451, acc 0.2347 (32.1s) | lr 3.676e-04 | updates 6785/17250
+Ep 60 | train_loss 1.3588, acc 0.6030 (104.9s) | val_loss 3.3910, acc 0.2339 (32.1s) | lr 3.636e-04 | updates 6900/17250
+Ep 61 | train_loss 1.3333, acc 0.6087 (104.9s) | val_loss 3.3718, acc 0.2303 (32.1s) | lr 3.596e-04 | updates 7015/17250
+Ep 62 | train_loss 1.2809, acc 0.6296 (104.9s) | val_loss 3.5243, acc 0.2298 (32.2s) | lr 3.555e-04 | updates 7130/17250
+Ep 63 | train_loss 1.2669, acc 0.6351 (104.9s) | val_loss 3.4905, acc 0.2246 (32.1s) | lr 3.515e-04 | updates 7245/17250
+Ep 64 | train_loss 1.2627, acc 0.6389 (104.8s) | val_loss 3.5335, acc 0.2259 (32.1s) | lr 3.474e-04 | updates 7360/17250
+Ep 65 | train_loss 1.1844, acc 0.6690 (104.9s) | val_loss 3.6085, acc 0.2344 (32.1s) | lr 3.434e-04 | updates 7475/17250
+Ep 66 | train_loss 1.2014, acc 0.6524 (104.9s) | val_loss 3.6534, acc 0.2232 (32.1s) | lr 3.393e-04 | updates 7590/17250
+Ep 67 | train_loss 1.1542, acc 0.6658 (104.9s) | val_loss 3.5653, acc 0.2314 (32.2s) | lr 3.353e-04 | updates 7705/17250
+Ep 68 | train_loss 1.0749, acc 0.6902 (104.9s) | val_loss 3.7155, acc 0.2243 (32.2s) | lr 3.313e-04 | updates 7820/17250
+Ep 69 | train_loss 1.1081, acc 0.6883 (104.9s) | val_loss 3.6954, acc 0.2377 (32.2s) | lr 3.272e-04 | updates 7935/17250
+Ep 70 | train_loss 1.0807, acc 0.6957 (104.8s) | val_loss 3.6364, acc 0.2396 (32.1s) | lr 3.232e-04 | updates 8050/17250
+Ep 71 | train_loss 1.0256, acc 0.7073 (104.8s) | val_loss 3.7663, acc 0.2178 (32.1s) | lr 3.191e-04 | updates 8165/17250
+Ep 72 | train_loss 1.0320, acc 0.7155 (104.8s) | val_loss 3.7262, acc 0.2379 (32.2s) | lr 3.151e-04 | updates 8280/17250
+Ep 73 | train_loss 0.9832, acc 0.7217 (104.9s) | val_loss 3.7825, acc 0.2284 (32.1s) | lr 3.111e-04 | updates 8395/17250
+Ep 74 | train_loss 1.0016, acc 0.7215 (104.9s) | val_loss 3.7439, acc 0.2281 (32.2s) | lr 3.070e-04 | updates 8510/17250
+Ep 75 | train_loss 0.9627, acc 0.7378 (104.9s) | val_loss 3.7074, acc 0.2311 (32.1s) | lr 3.030e-04 | updates 8625/17250
+Ep 76 | train_loss 0.9257, acc 0.7408 (104.9s) | val_loss 3.7786, acc 0.2344 (32.1s) | lr 2.989e-04 | updates 8740/17250
+Ep 77 | train_loss 0.9221, acc 0.7432 (104.9s) | val_loss 3.7996, acc 0.2404 (32.2s) | lr 2.949e-04 | updates 8855/17250
+Ep 78 | train_loss 0.9191, acc 0.7465 (104.9s) | val_loss 3.9302, acc 0.2251 (32.2s) | lr 2.909e-04 | updates 8970/17250
+Ep 79 | train_loss 0.9209, acc 0.7462 (104.9s) | val_loss 3.7751, acc 0.2434 (32.2s) | lr 2.868e-04 | updates 9085/17250
+Ep 80 | train_loss 0.8418, acc 0.7647 (104.9s) | val_loss 3.8977, acc 0.2240 (32.2s) | lr 2.828e-04 | updates 9200/17250
+Ep 81 | train_loss 0.8636, acc 0.7571 (104.9s) | val_loss 3.8586, acc 0.2401 (32.2s) | lr 2.787e-04 | updates 9315/17250
+Ep 82 | train_loss 0.8423, acc 0.7565 (104.8s) | val_loss 3.9317, acc 0.2309 (32.1s) | lr 2.747e-04 | updates 9430/17250
+Ep 83 | train_loss 0.8185, acc 0.7758 (104.9s) | val_loss 3.8124, acc 0.2461 (32.2s) | lr 2.707e-04 | updates 9545/17250
+Ep 84 | train_loss 0.7775, acc 0.7889 (104.9s) | val_loss 4.0486, acc 0.2322 (32.2s) | lr 2.666e-04 | updates 9660/17250
+Ep 85 | train_loss 0.7836, acc 0.7840 (104.9s) | val_loss 3.9662, acc 0.2317 (32.2s) | lr 2.626e-04 | updates 9775/17250
+Ep 86 | train_loss 0.7828, acc 0.7859 (104.9s) | val_loss 4.1059, acc 0.2254 (32.2s) | lr 2.585e-04 | updates 9890/17250
+Ep 87 | train_loss 0.7296, acc 0.7948 (104.9s) | val_loss 4.0832, acc 0.2289 (32.2s) | lr 2.545e-04 | updates 10005/17250
+Ep 88 | train_loss 0.7492, acc 0.7940 (104.9s) | val_loss 4.0702, acc 0.2360 (32.1s) | lr 2.505e-04 | updates 10120/17250
+Ep 89 | train_loss 0.7458, acc 0.7967 (104.9s) | val_loss 4.0787, acc 0.2371 (32.2s) | lr 2.464e-04 | updates 10235/17250
+Ep 90 | train_loss 0.7473, acc 0.7913 (104.9s) | val_loss 4.1385, acc 0.2268 (32.2s) | lr 2.424e-04 | updates 10350/17250
+Ep 91 | train_loss 0.7190, acc 0.8076 (104.9s) | val_loss 4.1131, acc 0.2330 (32.2s) | lr 2.383e-04 | updates 10465/17250
+Ep 92 | train_loss 0.7254, acc 0.7935 (104.9s) | val_loss 4.0993, acc 0.2336 (32.1s) | lr 2.343e-04 | updates 10580/17250
+Ep 93 | train_loss 0.7287, acc 0.7981 (104.9s) | val_loss 4.1182, acc 0.2276 (32.2s) | lr 2.303e-04 | updates 10695/17250
+Ep 94 | train_loss 0.6890, acc 0.8139 (104.8s) | val_loss 4.1246, acc 0.2339 (32.2s) | lr 2.262e-04 | updates 10810/17250
+Ep 95 | train_loss 0.6847, acc 0.8063 (104.9s) | val_loss 4.1744, acc 0.2197 (32.1s) | lr 2.222e-04 | updates 10925/17250
+Ep 96 | train_loss 0.6880, acc 0.8092 (104.9s) | val_loss 4.2372, acc 0.2314 (32.1s) | lr 2.181e-04 | updates 11040/17250
+Ep 97 | train_loss 0.6658, acc 0.8166 (104.9s) | val_loss 4.1482, acc 0.2393 (32.1s) | lr 2.141e-04 | updates 11155/17250
+Ep 98 | train_loss 0.6450, acc 0.8204 (104.9s) | val_loss 4.2362, acc 0.2349 (32.1s) | lr 2.101e-04 | updates 11270/17250
+Ep 99 | train_loss 0.6497, acc 0.8258 (104.9s) | val_loss 4.2305, acc 0.2279 (32.1s) | lr 2.060e-04 | updates 11385/17250
+Ep100 | train_loss 0.6529, acc 0.8182 (104.9s) | val_loss 4.1919, acc 0.2295 (32.1s) | lr 2.020e-04 | updates 11500/17250
+Ep101 | train_loss 0.6154, acc 0.8288 (104.9s) | val_loss 4.2226, acc 0.2292 (32.1s) | lr 1.979e-04 | updates 11615/17250
+Ep102 | train_loss 0.6243, acc 0.8329 (104.9s) | val_loss 4.2419, acc 0.2418 (32.1s) | lr 1.939e-04 | updates 11730/17250
+Ep103 | train_loss 0.5919, acc 0.8378 (104.9s) | val_loss 4.2811, acc 0.2360 (32.1s) | lr 1.899e-04 | updates 11845/17250
+Ep104 | train_loss 0.5623, acc 0.8503 (104.8s) | val_loss 4.2351, acc 0.2363 (32.1s) | lr 1.858e-04 | updates 11960/17250
+Ep105 | train_loss 0.5825, acc 0.8438 (105.0s) | val_loss 4.2249, acc 0.2426 (32.1s) | lr 1.818e-04 | updates 12075/17250
+Ep106 | train_loss 0.5904, acc 0.8424 (104.8s) | val_loss 4.3492, acc 0.2292 (32.1s) | lr 1.777e-04 | updates 12190/17250
+Ep107 | train_loss 0.5906, acc 0.8427 (104.9s) | val_loss 4.2945, acc 0.2262 (32.1s) | lr 1.737e-04 | updates 12305/17250
+Ep108 | train_loss 0.5207, acc 0.8587 (104.8s) | val_loss 4.3250, acc 0.2336 (32.1s) | lr 1.697e-04 | updates 12420/17250
+Ep109 | train_loss 0.5442, acc 0.8587 (104.9s) | val_loss 4.3171, acc 0.2341 (32.2s) | lr 1.656e-04 | updates 12535/17250
+Ep110 | train_loss 0.5329, acc 0.8611 (104.9s) | val_loss 4.2992, acc 0.2344 (32.2s) | lr 1.616e-04 | updates 12650/17250
+Ep111 | train_loss 0.4952, acc 0.8674 (104.9s) | val_loss 4.3199, acc 0.2330 (32.2s) | lr 1.575e-04 | updates 12765/17250
+Ep112 | train_loss 0.5639, acc 0.8541 (104.9s) | val_loss 4.3047, acc 0.2371 (32.2s) | lr 1.535e-04 | updates 12880/17250
+Ep113 | train_loss 0.5342, acc 0.8552 (104.9s) | val_loss 4.3429, acc 0.2366 (32.2s) | lr 1.495e-04 | updates 12995/17250
+Ep114 | train_loss 0.4943, acc 0.8690 (104.9s) | val_loss 4.3114, acc 0.2295 (32.2s) | lr 1.454e-04 | updates 13110/17250
+Ep115 | train_loss 0.4696, acc 0.8764 (104.9s) | val_loss 4.4073, acc 0.2347 (32.2s) | lr 1.414e-04 | updates 13225/17250
+Ep116 | train_loss 0.4612, acc 0.8750 (104.8s) | val_loss 4.3499, acc 0.2355 (32.2s) | lr 1.373e-04 | updates 13340/17250
+Ep117 | train_loss 0.4863, acc 0.8736 (104.9s) | val_loss 4.3478, acc 0.2352 (32.1s) | lr 1.333e-04 | updates 13455/17250
+Ep118 | train_loss 0.4754, acc 0.8720 (104.8s) | val_loss 4.3326, acc 0.2298 (32.1s) | lr 1.293e-04 | updates 13570/17250
+Ep119 | train_loss 0.4833, acc 0.8701 (104.9s) | val_loss 4.4364, acc 0.2388 (32.1s) | lr 1.252e-04 | updates 13685/17250
+Ep120 | train_loss 0.4575, acc 0.8766 (104.8s) | val_loss 4.3376, acc 0.2437 (32.1s) | lr 1.212e-04 | updates 13800/17250
+Ep121 | train_loss 0.4677, acc 0.8769 (104.9s) | val_loss 4.3764, acc 0.2434 (32.2s) | lr 1.171e-04 | updates 13915/17250
+Ep122 | train_loss 0.4607, acc 0.8810 (104.9s) | val_loss 4.4947, acc 0.2418 (32.2s) | lr 1.131e-04 | updates 14030/17250
+Ep123 | train_loss 0.4910, acc 0.8769 (104.9s) | val_loss 4.3409, acc 0.2330 (32.2s) | lr 1.091e-04 | updates 14145/17250
+Ep124 | train_loss 0.4226, acc 0.8894 (104.9s) | val_loss 4.3652, acc 0.2388 (32.2s) | lr 1.050e-04 | updates 14260/17250
+Ep125 | train_loss 0.4210, acc 0.8823 (104.9s) | val_loss 4.4401, acc 0.2388 (32.3s) | lr 1.010e-04 | updates 14375/17250
+Ep126 | train_loss 0.4123, acc 0.8929 (104.9s) | val_loss 4.3974, acc 0.2445 (32.2s) | lr 9.693e-05 | updates 14490/17250
+Ep127 | train_loss 0.3961, acc 0.9024 (104.9s) | val_loss 4.4552, acc 0.2393 (32.2s) | lr 9.289e-05 | updates 14605/17250
+Ep128 | train_loss 0.4167, acc 0.8924 (104.8s) | val_loss 4.4627, acc 0.2352 (32.1s) | lr 8.885e-05 | updates 14720/17250
+Ep129 | train_loss 0.4125, acc 0.8916 (104.9s) | val_loss 4.4125, acc 0.2325 (32.1s) | lr 8.481e-05 | updates 14835/17250
+Ep130 | train_loss 0.3984, acc 0.8932 (104.9s) | val_loss 4.4645, acc 0.2358 (32.1s) | lr 8.077e-05 | updates 14950/17250
+Ep131 | train_loss 0.3839, acc 0.9005 (105.0s) | val_loss 4.4039, acc 0.2379 (32.2s) | lr 7.673e-05 | updates 15065/17250
+Ep132 | train_loss 0.3891, acc 0.8984 (104.9s) | val_loss 4.4077, acc 0.2333 (32.2s) | lr 7.269e-05 | updates 15180/17250
+Ep133 | train_loss 0.3943, acc 0.8984 (105.0s) | val_loss 4.4297, acc 0.2450 (32.2s) | lr 6.865e-05 | updates 15295/17250
+Ep134 | train_loss 0.4043, acc 0.8973 (104.8s) | val_loss 4.3810, acc 0.2415 (32.2s) | lr 6.461e-05 | updates 15410/17250
+Ep135 | train_loss 0.3961, acc 0.8918 (104.9s) | val_loss 4.5009, acc 0.2363 (32.3s) | lr 6.057e-05 | updates 15525/17250
+Ep136 | train_loss 0.3894, acc 0.8940 (104.9s) | val_loss 4.4727, acc 0.2390 (32.3s) | lr 5.653e-05 | updates 15640/17250
+Ep137 | train_loss 0.3684, acc 0.9038 (104.9s) | val_loss 4.4854, acc 0.2382 (32.2s) | lr 5.249e-05 | updates 15755/17250
+Ep138 | train_loss 0.3625, acc 0.9033 (2663.2s) | val_loss 4.4484, acc 0.2467 (31.9s) | lr 4.845e-05 | updates 15870/17250
+Ep139 | train_loss 0.3452, acc 0.9147 (104.8s) | val_loss 4.5014, acc 0.2448 (32.2s) | lr 4.441e-05 | updates 15985/17250
+Ep140 | train_loss 0.3691, acc 0.9038 (104.8s) | val_loss 4.4935, acc 0.2458 (32.2s) | lr 4.037e-05 | updates 16100/17250
+Ep141 | train_loss 0.3535, acc 0.9065 (104.9s) | val_loss 4.4701, acc 0.2407 (32.2s) | lr 3.633e-05 | updates 16215/17250
+Ep142 | train_loss 0.3345, acc 0.9046 (104.9s) | val_loss 4.4809, acc 0.2456 (32.2s) | lr 3.229e-05 | updates 16330/17250
+Ep143 | train_loss 0.3295, acc 0.9155 (104.8s) | val_loss 4.4696, acc 0.2437 (32.2s) | lr 2.825e-05 | updates 16445/17250
+Ep144 | train_loss 0.3289, acc 0.9095 (104.9s) | val_loss 4.5095, acc 0.2374 (32.2s) | lr 2.421e-05 | updates 16560/17250
+Ep145 | train_loss 0.3250, acc 0.9128 (104.9s) | val_loss 4.4920, acc 0.2437 (32.2s) | lr 2.017e-05 | updates 16675/17250
+Ep146 | train_loss 0.3224, acc 0.9152 (104.8s) | val_loss 4.4827, acc 0.2431 (32.3s) | lr 1.613e-05 | updates 16790/17250
+Ep147 | train_loss 0.3438, acc 0.9160 (104.9s) | val_loss 4.4804, acc 0.2431 (32.2s) | lr 1.209e-05 | updates 16905/17250
+Ep148 | train_loss 0.3158, acc 0.9207 (104.8s) | val_loss 4.4817, acc 0.2445 (32.2s) | lr 8.045e-06 | updates 17020/17250
+Ep149 | train_loss 0.3530, acc 0.9084 (104.8s) | val_loss 4.4824, acc 0.2450 (32.2s) | lr 4.005e-06 | updates 17135/17250
+Ep150 | train_loss 0.3296, acc 0.9128 (104.9s) | val_loss 4.4753, acc 0.2442 (32.1s) | lr -3.513e-08 | updates 17250/17250
+------------------------------------------------------------------------
+Log saved to: /mnt/drive7/projects/my_project/RACE_Attention/trial_exact_flash_K2_L5_M1_VIT.txt
+Epochs: 150
+------------------------------------------------------------------------
+Ep  1 | train_loss 4.5039, acc 0.0225 (29.5s) | val_loss 4.0327, acc 0.0676 (9.4s) | lr 4.125e-04 | updates 32/4800
+Ep  2 | train_loss 3.9902, acc 0.0559 (29.6s) | val_loss 3.6630, acc 0.1088 (9.4s) | lr 5.979e-04 | updates 64/4800
+Ep  3 | train_loss 3.6461, acc 0.1020 (29.6s) | val_loss 3.5096, acc 0.1412 (9.3s) | lr 5.938e-04 | updates 96/4800
+Ep  4 | train_loss 3.4662, acc 0.1206 (29.5s) | val_loss 3.3222, acc 0.1882 (9.4s) | lr 5.898e-04 | updates 128/4800
+Ep  5 | train_loss 3.2331, acc 0.1824 (29.5s) | val_loss 3.3157, acc 0.1618 (9.4s) | lr 5.857e-04 | updates 160/4800
+Ep  6 | train_loss 3.1405, acc 0.1863 (29.5s) | val_loss 3.1474, acc 0.2314 (9.4s) | lr 5.817e-04 | updates 192/4800
+Ep  7 | train_loss 2.9544, acc 0.2284 (29.5s) | val_loss 3.0548, acc 0.2353 (9.4s) | lr 5.777e-04 | updates 224/4800
+Ep  8 | train_loss 2.8582, acc 0.2441 (29.5s) | val_loss 2.9790, acc 0.2490 (9.3s) | lr 5.736e-04 | updates 256/4800
+Ep  9 | train_loss 2.7450, acc 0.2804 (29.5s) | val_loss 2.9000, acc 0.2608 (9.4s) | lr 5.696e-04 | updates 288/4800
+Ep 10 | train_loss 2.6807, acc 0.2775 (29.5s) | val_loss 2.8709, acc 0.2775 (9.4s) | lr 5.655e-04 | updates 320/4800
+Ep 11 | train_loss 2.6041, acc 0.3137 (29.5s) | val_loss 2.7776, acc 0.3127 (9.4s) | lr 5.615e-04 | updates 352/4800
+Ep 12 | train_loss 2.4833, acc 0.3275 (29.5s) | val_loss 2.7862, acc 0.3029 (9.4s) | lr 5.574e-04 | updates 384/4800
+Ep 13 | train_loss 2.3814, acc 0.3598 (29.5s) | val_loss 2.7816, acc 0.2951 (9.4s) | lr 5.534e-04 | updates 416/4800
+Ep 14 | train_loss 2.3612, acc 0.3529 (29.5s) | val_loss 2.7295, acc 0.3059 (9.4s) | lr 5.494e-04 | updates 448/4800
+Ep 15 | train_loss 2.2274, acc 0.3853 (29.5s) | val_loss 2.6759, acc 0.3275 (9.4s) | lr 5.453e-04 | updates 480/4800
+Ep 16 | train_loss 2.1819, acc 0.4059 (29.5s) | val_loss 2.6682, acc 0.3294 (9.4s) | lr 5.413e-04 | updates 512/4800
+Ep 17 | train_loss 2.1030, acc 0.4392 (29.5s) | val_loss 2.6580, acc 0.3441 (9.4s) | lr 5.372e-04 | updates 544/4800
+Ep 18 | train_loss 1.9655, acc 0.4500 (29.5s) | val_loss 2.5825, acc 0.3618 (9.3s) | lr 5.332e-04 | updates 576/4800
+Ep 19 | train_loss 2.0093, acc 0.4373 (29.5s) | val_loss 2.6861, acc 0.3382 (9.4s) | lr 5.292e-04 | updates 608/4800
+Ep 20 | train_loss 1.9076, acc 0.4627 (29.5s) | val_loss 2.6793, acc 0.3324 (9.4s) | lr 5.251e-04 | updates 640/4800
+Ep 21 | train_loss 1.9195, acc 0.4608 (29.5s) | val_loss 2.6139, acc 0.3539 (9.4s) | lr 5.211e-04 | updates 672/4800
+Ep 22 | train_loss 1.7343, acc 0.5108 (29.5s) | val_loss 2.5996, acc 0.3598 (9.4s) | lr 5.170e-04 | updates 704/4800
+Ep 23 | train_loss 1.6313, acc 0.5275 (29.6s) | val_loss 2.5594, acc 0.3637 (9.4s) | lr 5.130e-04 | updates 736/4800
+Ep 24 | train_loss 1.5205, acc 0.5637 (29.5s) | val_loss 2.4726, acc 0.3863 (9.4s) | lr 5.090e-04 | updates 768/4800
+Ep 25 | train_loss 1.5134, acc 0.5745 (29.5s) | val_loss 2.5703, acc 0.4010 (9.4s) | lr 5.049e-04 | updates 800/4800
+Ep 26 | train_loss 1.4663, acc 0.5735 (29.5s) | val_loss 2.6167, acc 0.3745 (9.4s) | lr 5.009e-04 | updates 832/4800
+Ep 27 | train_loss 1.4175, acc 0.5882 (29.5s) | val_loss 2.5708, acc 0.3990 (9.4s) | lr 4.968e-04 | updates 864/4800
+Ep 28 | train_loss 1.4476, acc 0.5980 (29.5s) | val_loss 2.6050, acc 0.3863 (9.4s) | lr 4.928e-04 | updates 896/4800
+Ep 29 | train_loss 1.3503, acc 0.6294 (29.5s) | val_loss 2.5381, acc 0.3912 (9.4s) | lr 4.888e-04 | updates 928/4800
+Ep 30 | train_loss 1.2840, acc 0.6382 (29.5s) | val_loss 2.5255, acc 0.3843 (9.4s) | lr 4.847e-04 | updates 960/4800
+Ep 31 | train_loss 1.1335, acc 0.6902 (29.5s) | val_loss 2.5870, acc 0.3912 (9.4s) | lr 4.807e-04 | updates 992/4800
+Ep 32 | train_loss 1.1349, acc 0.6755 (29.5s) | val_loss 2.5549, acc 0.4078 (9.4s) | lr 4.766e-04 | updates 1024/4800
+Ep 33 | train_loss 1.1155, acc 0.6755 (29.5s) | val_loss 2.7638, acc 0.3637 (9.4s) | lr 4.726e-04 | updates 1056/4800
+Ep 34 | train_loss 1.1243, acc 0.6941 (29.5s) | val_loss 2.7257, acc 0.3892 (9.4s) | lr 4.686e-04 | updates 1088/4800
+Ep 35 | train_loss 1.0378, acc 0.7255 (29.5s) | val_loss 2.6955, acc 0.3814 (9.4s) | lr 4.645e-04 | updates 1120/4800
+Ep 36 | train_loss 1.0078, acc 0.7353 (29.6s) | val_loss 2.6057, acc 0.4127 (9.4s) | lr 4.605e-04 | updates 1152/4800
+Ep 37 | train_loss 0.9465, acc 0.7500 (29.5s) | val_loss 2.6249, acc 0.4137 (9.4s) | lr 4.564e-04 | updates 1184/4800
+Ep 38 | train_loss 0.8610, acc 0.7549 (29.5s) | val_loss 2.6265, acc 0.4196 (9.4s) | lr 4.524e-04 | updates 1216/4800
+Ep 39 | train_loss 0.8996, acc 0.7520 (29.5s) | val_loss 2.6677, acc 0.3990 (9.4s) | lr 4.484e-04 | updates 1248/4800
+Ep 40 | train_loss 0.8966, acc 0.7608 (29.5s) | val_loss 2.6780, acc 0.4255 (9.4s) | lr 4.443e-04 | updates 1280/4800
+Ep 41 | train_loss 0.8810, acc 0.7627 (29.5s) | val_loss 2.6062, acc 0.4206 (9.4s) | lr 4.403e-04 | updates 1312/4800
+Ep 42 | train_loss 0.8565, acc 0.7559 (29.5s) | val_loss 2.6737, acc 0.4235 (9.4s) | lr 4.362e-04 | updates 1344/4800
+Ep 43 | train_loss 0.8061, acc 0.7794 (29.5s) | val_loss 2.6960, acc 0.4108 (9.4s) | lr 4.322e-04 | updates 1376/4800
+Ep 44 | train_loss 0.7168, acc 0.8098 (29.5s) | val_loss 2.7578, acc 0.3922 (9.4s) | lr 4.282e-04 | updates 1408/4800
+Ep 45 | train_loss 0.7629, acc 0.7892 (29.5s) | val_loss 2.6686, acc 0.4275 (9.4s) | lr 4.241e-04 | updates 1440/4800
+Ep 46 | train_loss 0.7304, acc 0.8069 (29.5s) | val_loss 2.7451, acc 0.4206 (9.4s) | lr 4.201e-04 | updates 1472/4800
+Ep 47 | train_loss 0.6771, acc 0.8196 (29.5s) | val_loss 2.7200, acc 0.4196 (9.3s) | lr 4.160e-04 | updates 1504/4800
+Ep 48 | train_loss 0.6788, acc 0.8147 (29.5s) | val_loss 2.7094, acc 0.4373 (9.4s) | lr 4.120e-04 | updates 1536/4800
+Ep 49 | train_loss 0.6143, acc 0.8206 (29.5s) | val_loss 2.7081, acc 0.4235 (9.3s) | lr 4.080e-04 | updates 1568/4800
+Ep 50 | train_loss 0.6446, acc 0.8245 (29.5s) | val_loss 2.7964, acc 0.4324 (9.4s) | lr 4.039e-04 | updates 1600/4800
+Ep 51 | train_loss 0.6050, acc 0.8343 (29.5s) | val_loss 2.7800, acc 0.4157 (9.3s) | lr 3.999e-04 | updates 1632/4800
+Ep 52 | train_loss 0.6768, acc 0.8186 (29.5s) | val_loss 2.8403, acc 0.4039 (9.4s) | lr 3.958e-04 | updates 1664/4800
+Ep 53 | train_loss 0.6504, acc 0.8314 (29.5s) | val_loss 2.8296, acc 0.4137 (9.4s) | lr 3.918e-04 | updates 1696/4800
+Ep 54 | train_loss 0.5985, acc 0.8206 (29.5s) | val_loss 2.7336, acc 0.4324 (9.4s) | lr 3.878e-04 | updates 1728/4800
+Ep 55 | train_loss 0.5889, acc 0.8441 (29.5s) | val_loss 2.8325, acc 0.4088 (9.4s) | lr 3.837e-04 | updates 1760/4800
+Ep 56 | train_loss 0.5631, acc 0.8510 (29.5s) | val_loss 2.6590, acc 0.4549 (9.3s) | lr 3.797e-04 | updates 1792/4800
+Ep 57 | train_loss 0.5161, acc 0.8627 (29.5s) | val_loss 2.8724, acc 0.4108 (9.4s) | lr 3.756e-04 | updates 1824/4800
+Ep 58 | train_loss 0.5603, acc 0.8422 (29.5s) | val_loss 2.7342, acc 0.4314 (9.4s) | lr 3.716e-04 | updates 1856/4800
+Ep 59 | train_loss 0.5515, acc 0.8637 (29.5s) | val_loss 2.8382, acc 0.4333 (9.4s) | lr 3.676e-04 | updates 1888/4800
+Ep 60 | train_loss 0.5055, acc 0.8667 (29.5s) | val_loss 2.8038, acc 0.4078 (9.3s) | lr 3.635e-04 | updates 1920/4800
+Ep 61 | train_loss 0.4939, acc 0.8657 (29.5s) | val_loss 2.8943, acc 0.4147 (9.4s) | lr 3.595e-04 | updates 1952/4800
+Ep 62 | train_loss 0.4398, acc 0.8833 (29.5s) | val_loss 2.8863, acc 0.4284 (9.4s) | lr 3.554e-04 | updates 1984/4800
+Ep 63 | train_loss 0.4774, acc 0.8706 (29.5s) | val_loss 2.9313, acc 0.4324 (9.3s) | lr 3.514e-04 | updates 2016/4800
+Ep 64 | train_loss 0.4422, acc 0.8784 (29.5s) | val_loss 2.9542, acc 0.4147 (9.4s) | lr 3.473e-04 | updates 2048/4800
+Ep 65 | train_loss 0.4087, acc 0.8824 (29.5s) | val_loss 2.8352, acc 0.4275 (9.4s) | lr 3.433e-04 | updates 2080/4800
+Ep 66 | train_loss 0.4746, acc 0.8784 (29.5s) | val_loss 2.8815, acc 0.4304 (9.4s) | lr 3.393e-04 | updates 2112/4800
+Ep 67 | train_loss 0.4353, acc 0.8882 (29.5s) | val_loss 2.8804, acc 0.4471 (9.4s) | lr 3.352e-04 | updates 2144/4800
+Ep 68 | train_loss 0.4530, acc 0.8745 (29.5s) | val_loss 2.9385, acc 0.4304 (9.4s) | lr 3.312e-04 | updates 2176/4800
+Ep 69 | train_loss 0.4254, acc 0.8931 (29.5s) | val_loss 2.8673, acc 0.4294 (9.4s) | lr 3.271e-04 | updates 2208/4800
+Ep 70 | train_loss 0.4364, acc 0.8784 (29.5s) | val_loss 2.8785, acc 0.4392 (9.4s) | lr 3.231e-04 | updates 2240/4800
+Ep 71 | train_loss 0.3590, acc 0.9069 (29.5s) | val_loss 2.9953, acc 0.4324 (9.4s) | lr 3.191e-04 | updates 2272/4800
+Ep 72 | train_loss 0.3785, acc 0.8971 (29.5s) | val_loss 2.8636, acc 0.4441 (9.4s) | lr 3.150e-04 | updates 2304/4800
+Ep 73 | train_loss 0.3456, acc 0.9176 (29.5s) | val_loss 2.9836, acc 0.4304 (9.4s) | lr 3.110e-04 | updates 2336/4800
+Ep 74 | train_loss 0.4546, acc 0.8745 (29.5s) | val_loss 2.9237, acc 0.4441 (9.4s) | lr 3.069e-04 | updates 2368/4800
+Ep 75 | train_loss 0.4060, acc 0.9020 (29.5s) | val_loss 2.8616, acc 0.4412 (9.4s) | lr 3.029e-04 | updates 2400/4800
+Ep 76 | train_loss 0.3420, acc 0.9157 (29.5s) | val_loss 2.8471, acc 0.4500 (9.4s) | lr 2.989e-04 | updates 2432/4800
+Ep 77 | train_loss 0.3243, acc 0.9147 (29.5s) | val_loss 2.9203, acc 0.4216 (9.4s) | lr 2.948e-04 | updates 2464/4800
+Ep 78 | train_loss 0.3546, acc 0.8912 (29.5s) | val_loss 2.9850, acc 0.4451 (9.4s) | lr 2.908e-04 | updates 2496/4800
+Ep 79 | train_loss 0.3209, acc 0.9275 (29.5s) | val_loss 2.9296, acc 0.4441 (9.4s) | lr 2.867e-04 | updates 2528/4800
+Ep 80 | train_loss 0.3511, acc 0.9118 (29.5s) | val_loss 3.0165, acc 0.4461 (9.4s) | lr 2.827e-04 | updates 2560/4800
+Ep 81 | train_loss 0.3581, acc 0.8951 (29.5s) | val_loss 2.8299, acc 0.4529 (9.3s) | lr 2.787e-04 | updates 2592/4800
+Ep 82 | train_loss 0.3595, acc 0.9098 (29.5s) | val_loss 3.0127, acc 0.4304 (9.4s) | lr 2.746e-04 | updates 2624/4800
+Ep 83 | train_loss 0.3241, acc 0.9127 (29.5s) | val_loss 2.9827, acc 0.4265 (9.4s) | lr 2.706e-04 | updates 2656/4800
+Ep 84 | train_loss 0.3458, acc 0.9147 (29.5s) | val_loss 3.0316, acc 0.4510 (9.4s) | lr 2.665e-04 | updates 2688/4800
+Ep 85 | train_loss 0.2721, acc 0.9333 (29.5s) | val_loss 3.0380, acc 0.4412 (9.4s) | lr 2.625e-04 | updates 2720/4800
+Ep 86 | train_loss 0.2734, acc 0.9235 (29.5s) | val_loss 2.9737, acc 0.4324 (9.4s) | lr 2.585e-04 | updates 2752/4800
+Ep 87 | train_loss 0.2920, acc 0.9304 (29.5s) | val_loss 2.9297, acc 0.4422 (9.4s) | lr 2.544e-04 | updates 2784/4800
+Ep 88 | train_loss 0.2480, acc 0.9422 (29.5s) | val_loss 2.9603, acc 0.4480 (9.4s) | lr 2.504e-04 | updates 2816/4800
+Ep 89 | train_loss 0.2444, acc 0.9382 (29.5s) | val_loss 3.0041, acc 0.4333 (9.3s) | lr 2.463e-04 | updates 2848/4800
+Ep 90 | train_loss 0.2847, acc 0.9167 (29.5s) | val_loss 2.9401, acc 0.4549 (9.4s) | lr 2.423e-04 | updates 2880/4800
+Ep 91 | train_loss 0.2747, acc 0.9284 (29.5s) | val_loss 2.9674, acc 0.4520 (9.4s) | lr 2.383e-04 | updates 2912/4800
+Ep 92 | train_loss 0.2633, acc 0.9343 (29.5s) | val_loss 3.2143, acc 0.4206 (9.4s) | lr 2.342e-04 | updates 2944/4800
+Ep 93 | train_loss 0.2561, acc 0.9333 (29.5s) | val_loss 3.0408, acc 0.4490 (9.4s) | lr 2.302e-04 | updates 2976/4800
+Ep 94 | train_loss 0.2352, acc 0.9441 (29.5s) | val_loss 3.0420, acc 0.4363 (9.3s) | lr 2.261e-04 | updates 3008/4800
+Ep 95 | train_loss 0.2891, acc 0.9265 (29.5s) | val_loss 3.0371, acc 0.4441 (9.4s) | lr 2.221e-04 | updates 3040/4800
+Ep 96 | train_loss 0.2793, acc 0.9333 (29.5s) | val_loss 3.0988, acc 0.4451 (9.4s) | lr 2.181e-04 | updates 3072/4800
+Ep 97 | train_loss 0.2672, acc 0.9304 (29.5s) | val_loss 3.1081, acc 0.4461 (9.4s) | lr 2.140e-04 | updates 3104/4800
+Ep 98 | train_loss 0.2455, acc 0.9373 (29.5s) | val_loss 3.1061, acc 0.4451 (9.4s) | lr 2.100e-04 | updates 3136/4800
+Ep 99 | train_loss 0.2593, acc 0.9363 (29.5s) | val_loss 3.0746, acc 0.4373 (9.4s) | lr 2.059e-04 | updates 3168/4800
+Ep100 | train_loss 0.2100, acc 0.9500 (29.5s) | val_loss 3.0280, acc 0.4578 (9.4s) | lr 2.019e-04 | updates 3200/4800
+Ep101 | train_loss 0.2175, acc 0.9382 (29.5s) | val_loss 3.1971, acc 0.4294 (9.4s) | lr 1.979e-04 | updates 3232/4800
+Ep102 | train_loss 0.2701, acc 0.9343 (29.5s) | val_loss 3.1108, acc 0.4569 (9.4s) | lr 1.938e-04 | updates 3264/4800
+Ep103 | train_loss 0.2115, acc 0.9451 (29.5s) | val_loss 3.0643, acc 0.4559 (9.4s) | lr 1.898e-04 | updates 3296/4800
+Ep104 | train_loss 0.2703, acc 0.9343 (29.5s) | val_loss 3.1052, acc 0.4392 (9.4s) | lr 1.857e-04 | updates 3328/4800
+Ep105 | train_loss 0.2123, acc 0.9490 (29.5s) | val_loss 3.0956, acc 0.4422 (9.4s) | lr 1.817e-04 | updates 3360/4800
+Ep106 | train_loss 0.1701, acc 0.9578 (29.5s) | val_loss 3.0614, acc 0.4569 (9.4s) | lr 1.777e-04 | updates 3392/4800
+Ep107 | train_loss 0.2151, acc 0.9510 (29.5s) | val_loss 3.0462, acc 0.4471 (9.4s) | lr 1.736e-04 | updates 3424/4800
+Ep108 | train_loss 0.2058, acc 0.9441 (29.5s) | val_loss 3.1523, acc 0.4451 (9.4s) | lr 1.696e-04 | updates 3456/4800
+Ep109 | train_loss 0.2230, acc 0.9392 (29.5s) | val_loss 3.0702, acc 0.4402 (9.4s) | lr 1.655e-04 | updates 3488/4800
+Ep110 | train_loss 0.1705, acc 0.9578 (29.5s) | val_loss 3.1359, acc 0.4529 (9.4s) | lr 1.615e-04 | updates 3520/4800
+Ep111 | train_loss 0.2006, acc 0.9422 (29.5s) | val_loss 3.0253, acc 0.4657 (9.4s) | lr 1.574e-04 | updates 3552/4800
+Ep112 | train_loss 0.1391, acc 0.9657 (29.5s) | val_loss 3.1004, acc 0.4647 (9.4s) | lr 1.534e-04 | updates 3584/4800
+Ep113 | train_loss 0.1572, acc 0.9569 (29.5s) | val_loss 3.0667, acc 0.4696 (9.4s) | lr 1.494e-04 | updates 3616/4800
+Ep114 | train_loss 0.1573, acc 0.9598 (29.5s) | val_loss 3.0266, acc 0.4588 (9.3s) | lr 1.453e-04 | updates 3648/4800
+Ep115 | train_loss 0.2028, acc 0.9490 (29.5s) | val_loss 3.0901, acc 0.4451 (9.4s) | lr 1.413e-04 | updates 3680/4800
+Ep116 | train_loss 0.1304, acc 0.9618 (29.4s) | val_loss 3.0172, acc 0.4725 (9.4s) | lr 1.372e-04 | updates 3712/4800
+Ep117 | train_loss 0.1758, acc 0.9618 (29.5s) | val_loss 3.1018, acc 0.4471 (9.4s) | lr 1.332e-04 | updates 3744/4800
+Ep118 | train_loss 0.1482, acc 0.9667 (29.5s) | val_loss 3.0754, acc 0.4569 (9.4s) | lr 1.292e-04 | updates 3776/4800
+Ep119 | train_loss 0.1794, acc 0.9529 (29.4s) | val_loss 3.1006, acc 0.4490 (9.3s) | lr 1.251e-04 | updates 3808/4800
+Ep120 | train_loss 0.1626, acc 0.9647 (29.5s) | val_loss 3.0875, acc 0.4529 (9.3s) | lr 1.211e-04 | updates 3840/4800
+Ep121 | train_loss 0.1787, acc 0.9598 (29.5s) | val_loss 3.1056, acc 0.4569 (9.3s) | lr 1.170e-04 | updates 3872/4800
+Ep122 | train_loss 0.1419, acc 0.9676 (29.5s) | val_loss 3.0391, acc 0.4657 (9.4s) | lr 1.130e-04 | updates 3904/4800
+Ep123 | train_loss 0.1197, acc 0.9716 (29.5s) | val_loss 3.0666, acc 0.4578 (9.4s) | lr 1.090e-04 | updates 3936/4800
+Ep124 | train_loss 0.1642, acc 0.9569 (29.5s) | val_loss 3.1158, acc 0.4510 (9.4s) | lr 1.049e-04 | updates 3968/4800
+Ep125 | train_loss 0.1537, acc 0.9578 (29.5s) | val_loss 3.1391, acc 0.4578 (9.4s) | lr 1.009e-04 | updates 4000/4800
+Ep126 | train_loss 0.1031, acc 0.9765 (29.5s) | val_loss 3.1231, acc 0.4667 (9.4s) | lr 9.684e-05 | updates 4032/4800
+Ep127 | train_loss 0.1276, acc 0.9647 (29.5s) | val_loss 3.0913, acc 0.4559 (9.4s) | lr 9.280e-05 | updates 4064/4800
+Ep128 | train_loss 0.1307, acc 0.9667 (29.5s) | val_loss 3.1100, acc 0.4569 (9.3s) | lr 8.876e-05 | updates 4096/4800
+Ep129 | train_loss 0.1419, acc 0.9598 (29.5s) | val_loss 3.1151, acc 0.4657 (9.4s) | lr 8.472e-05 | updates 4128/4800
+Ep130 | train_loss 0.1409, acc 0.9676 (29.5s) | val_loss 3.1400, acc 0.4647 (9.4s) | lr 8.068e-05 | updates 4160/4800
+Ep131 | train_loss 0.1263, acc 0.9706 (29.4s) | val_loss 3.1537, acc 0.4627 (9.4s) | lr 7.664e-05 | updates 4192/4800
+Ep132 | train_loss 0.1372, acc 0.9608 (29.5s) | val_loss 3.1299, acc 0.4676 (9.4s) | lr 7.260e-05 | updates 4224/4800
+Ep133 | train_loss 0.1421, acc 0.9725 (29.5s) | val_loss 3.1016, acc 0.4716 (9.4s) | lr 6.856e-05 | updates 4256/4800
+Ep134 | train_loss 0.1437, acc 0.9637 (29.5s) | val_loss 3.0794, acc 0.4676 (9.4s) | lr 6.452e-05 | updates 4288/4800
+Ep135 | train_loss 0.1115, acc 0.9706 (29.5s) | val_loss 3.1082, acc 0.4716 (9.4s) | lr 6.048e-05 | updates 4320/4800
+Ep136 | train_loss 0.1030, acc 0.9765 (29.5s) | val_loss 3.1079, acc 0.4814 (9.4s) | lr 5.644e-05 | updates 4352/4800
+Ep137 | train_loss 0.1005, acc 0.9745 (29.5s) | val_loss 3.1333, acc 0.4706 (9.4s) | lr 5.240e-05 | updates 4384/4800
+Ep138 | train_loss 0.0937, acc 0.9775 (29.5s) | val_loss 3.1274, acc 0.4716 (9.4s) | lr 4.836e-05 | updates 4416/4800
+Ep139 | train_loss 0.1093, acc 0.9735 (29.5s) | val_loss 3.1345, acc 0.4588 (9.4s) | lr 4.432e-05 | updates 4448/4800
+Ep140 | train_loss 0.1131, acc 0.9735 (29.5s) | val_loss 3.1121, acc 0.4657 (9.4s) | lr 4.028e-05 | updates 4480/4800
+Ep141 | train_loss 0.1293, acc 0.9765 (29.5s) | val_loss 3.1012, acc 0.4735 (9.4s) | lr 3.624e-05 | updates 4512/4800
+Ep142 | train_loss 0.1303, acc 0.9716 (29.4s) | val_loss 3.1091, acc 0.4745 (9.4s) | lr 3.220e-05 | updates 4544/4800
+Ep143 | train_loss 0.1269, acc 0.9696 (29.5s) | val_loss 3.1350, acc 0.4637 (9.4s) | lr 2.816e-05 | updates 4576/4800
+Ep144 | train_loss 0.1412, acc 0.9647 (29.5s) | val_loss 3.1212, acc 0.4667 (9.4s) | lr 2.412e-05 | updates 4608/4800
+Ep145 | train_loss 0.0969, acc 0.9784 (29.4s) | val_loss 3.1217, acc 0.4676 (9.4s) | lr 2.008e-05 | updates 4640/4800
+Ep146 | train_loss 0.0820, acc 0.9804 (29.5s) | val_loss 3.1050, acc 0.4667 (9.4s) | lr 1.604e-05 | updates 4672/4800
+Ep147 | train_loss 0.1145, acc 0.9725 (29.5s) | val_loss 3.0878, acc 0.4647 (9.4s) | lr 1.199e-05 | updates 4704/4800
+Ep148 | train_loss 0.1021, acc 0.9765 (29.5s) | val_loss 3.1004, acc 0.4696 (9.3s) | lr 7.955e-06 | updates 4736/4800
+Ep149 | train_loss 0.1286, acc 0.9598 (29.5s) | val_loss 3.0963, acc 0.4716 (9.4s) | lr 3.914e-06 | updates 4768/4800
+Ep150 | train_loss 0.0997, acc 0.9765 (29.5s) | val_loss 3.0959, acc 0.4716 (9.4s) | lr -1.263e-07 | updates 4800/4800
+------------------------------------------------------------------------
+Log saved to: /mnt/drive7/projects/my_project/RACE_Attention/trial_exact_flash_K2_L5_M1_VIT.txt
+Epochs: 150
+------------------------------------------------------------------------
+Ep  1 | train_loss 3.6323, acc 0.0454 (108.5s) | val_loss 3.6056, acc 0.0545 (33.3s) | lr 4.047e-04 | updates 115/17250
+Epochs: 150
+------------------------------------------------------------------------
+Epochs: 150
+------------------------------------------------------------------------
+Ep  1 | train_loss 1.6275, acc 0.3526 (37.3s) | val_loss 1.2350, acc 0.4879 (2.0s) | lr 4.003e-04 | updates 1875/281250
+Ep  2 | train_loss 1.2638, acc 0.4911 (36.7s) | val_loss 1.1099, acc 0.5371 (2.1s) | lr 5.980e-04 | updates 3750/281250
+Ep  3 | train_loss 1.1152, acc 0.5556 (36.8s) | val_loss 0.9018, acc 0.6437 (2.1s) | lr 5.939e-04 | updates 5625/281250
+Ep  4 | train_loss 1.0281, acc 0.5995 (36.8s) | val_loss 0.9314, acc 0.6315 (2.1s) | lr 5.899e-04 | updates 7500/281250
+Ep  5 | train_loss 0.9585, acc 0.6281 (36.7s) | val_loss 0.8347, acc 0.6838 (2.1s) | lr 5.859e-04 | updates 9375/281250
+Ep  6 | train_loss 0.8744, acc 0.6627 (36.8s) | val_loss 0.7737, acc 0.6986 (2.1s) | lr 5.818e-04 | updates 11250/281250
+Ep  7 | train_loss 0.8151, acc 0.6881 (36.7s) | val_loss 0.7278, acc 0.7229 (2.1s) | lr 5.778e-04 | updates 13125/281250
+Ep  8 | train_loss 0.7776, acc 0.7015 (36.8s) | val_loss 0.6870, acc 0.7417 (2.1s) | lr 5.737e-04 | updates 15000/281250
+Ep  9 | train_loss 0.7491, acc 0.7110 (36.8s) | val_loss 0.7304, acc 0.7402 (2.1s) | lr 5.697e-04 | updates 16875/281250
+Ep 10 | train_loss 0.7249, acc 0.7204 (36.8s) | val_loss 0.6572, acc 0.7485 (2.1s) | lr 5.657e-04 | updates 18750/281250
+Ep 11 | train_loss 0.7020, acc 0.7326 (36.8s) | val_loss 0.6574, acc 0.7543 (2.1s) | lr 5.616e-04 | updates 20625/281250
+Ep 12 | train_loss 0.6886, acc 0.7363 (36.7s) | val_loss 0.6680, acc 0.7468 (2.1s) | lr 5.576e-04 | updates 22500/281250
+Ep 13 | train_loss 0.6780, acc 0.7417 (36.9s) | val_loss 0.6067, acc 0.7716 (2.1s) | lr 5.535e-04 | updates 24375/281250
+Ep 14 | train_loss 0.6645, acc 0.7468 (36.8s) | val_loss 0.5858, acc 0.7786 (2.0s) | lr 5.495e-04 | updates 26250/281250
+Ep 15 | train_loss 0.6513, acc 0.7514 (36.8s) | val_loss 0.5484, acc 0.7933 (2.1s) | lr 5.455e-04 | updates 28125/281250
+Ep 16 | train_loss 0.6463, acc 0.7529 (36.8s) | val_loss 0.5892, acc 0.7824 (2.1s) | lr 5.414e-04 | updates 30000/281250
+Ep 17 | train_loss 0.6406, acc 0.7560 (36.7s) | val_loss 0.5706, acc 0.7883 (2.1s) | lr 5.374e-04 | updates 31875/281250
+Ep 18 | train_loss 0.6346, acc 0.7579 (36.7s) | val_loss 0.5865, acc 0.7805 (2.1s) | lr 5.333e-04 | updates 33750/281250
+Ep 19 | train_loss 0.6281, acc 0.7610 (36.8s) | val_loss 0.5556, acc 0.7917 (2.0s) | lr 5.293e-04 | updates 35625/281250
+Ep 20 | train_loss 0.6223, acc 0.7630 (36.8s) | val_loss 0.5903, acc 0.7862 (2.1s) | lr 5.252e-04 | updates 37500/281250
+Ep 21 | train_loss 0.6138, acc 0.7655 (36.8s) | val_loss 0.5806, acc 0.7827 (2.1s) | lr 5.212e-04 | updates 39375/281250
+Ep 22 | train_loss 0.6112, acc 0.7651 (36.8s) | val_loss 0.5653, acc 0.7874 (2.1s) | lr 5.172e-04 | updates 41250/281250
+Ep 23 | train_loss 0.6066, acc 0.7672 (36.9s) | val_loss 0.5805, acc 0.7855 (2.1s) | lr 5.131e-04 | updates 43125/281250
+Ep 24 | train_loss 0.6015, acc 0.7691 (36.9s) | val_loss 0.5241, acc 0.8045 (2.1s) | lr 5.091e-04 | updates 45000/281250
+Ep 25 | train_loss 0.5997, acc 0.7690 (36.7s) | val_loss 0.5315, acc 0.7939 (2.1s) | lr 5.050e-04 | updates 46875/281250
+Ep 26 | train_loss 0.5931, acc 0.7748 (36.7s) | val_loss 0.5323, acc 0.7978 (2.1s) | lr 5.010e-04 | updates 48750/281250
+Ep 27 | train_loss 0.5910, acc 0.7749 (36.8s) | val_loss 0.5230, acc 0.8013 (2.1s) | lr 4.970e-04 | updates 50625/281250
+Ep 28 | train_loss 0.5920, acc 0.7734 (36.9s) | val_loss 0.5681, acc 0.7782 (2.1s) | lr 4.929e-04 | updates 52500/281250
+Ep 29 | train_loss 0.5877, acc 0.7764 (36.8s) | val_loss 0.5345, acc 0.8021 (2.1s) | lr 4.889e-04 | updates 54375/281250
+Ep 30 | train_loss 0.5880, acc 0.7748 (36.7s) | val_loss 0.5903, acc 0.7732 (2.1s) | lr 4.848e-04 | updates 56250/281250
+Ep 31 | train_loss 0.5832, acc 0.7771 (36.8s) | val_loss 0.5337, acc 0.8027 (2.1s) | lr 4.808e-04 | updates 58125/281250
+Ep 32 | train_loss 0.5764, acc 0.7797 (36.8s) | val_loss 0.5294, acc 0.7996 (2.1s) | lr 4.768e-04 | updates 60000/281250
+Ep 33 | train_loss 0.5744, acc 0.7825 (36.7s) | val_loss 0.5399, acc 0.7937 (2.1s) | lr 4.727e-04 | updates 61875/281250
+Ep 34 | train_loss 0.5704, acc 0.7829 (36.6s) | val_loss 0.5323, acc 0.7965 (2.0s) | lr 4.687e-04 | updates 63750/281250
+Ep 35 | train_loss 0.5682, acc 0.7835 (36.6s) | val_loss 0.5792, acc 0.7845 (2.1s) | lr 4.646e-04 | updates 65625/281250
+Ep 36 | train_loss 0.5690, acc 0.7834 (36.6s) | val_loss 0.5232, acc 0.8004 (2.1s) | lr 4.606e-04 | updates 67500/281250
+Ep 37 | train_loss 0.5634, acc 0.7849 (36.9s) | val_loss 0.5289, acc 0.7994 (2.1s) | lr 4.566e-04 | updates 69375/281250
+Ep 38 | train_loss 0.5661, acc 0.7836 (36.8s) | val_loss 0.5045, acc 0.8124 (2.1s) | lr 4.525e-04 | updates 71250/281250
+Ep 39 | train_loss 0.5586, acc 0.7872 (36.8s) | val_loss 0.5345, acc 0.8008 (2.1s) | lr 4.485e-04 | updates 73125/281250
+Ep 40 | train_loss 0.5590, acc 0.7880 (36.7s) | val_loss 0.5260, acc 0.7993 (2.1s) | lr 4.444e-04 | updates 75000/281250
+Ep 41 | train_loss 0.5543, acc 0.7887 (36.8s) | val_loss 0.5233, acc 0.8049 (2.1s) | lr 4.404e-04 | updates 76875/281250
+Ep 42 | train_loss 0.5549, acc 0.7893 (36.8s) | val_loss 0.5068, acc 0.8055 (2.1s) | lr 4.364e-04 | updates 78750/281250
+Ep 43 | train_loss 0.5535, acc 0.7876 (36.7s) | val_loss 0.4839, acc 0.8181 (2.0s) | lr 4.323e-04 | updates 80625/281250
+Ep 44 | train_loss 0.5477, acc 0.7912 (36.7s) | val_loss 0.4963, acc 0.8158 (2.1s) | lr 4.283e-04 | updates 82500/281250
+Ep 45 | train_loss 0.5536, acc 0.7896 (36.7s) | val_loss 0.4846, acc 0.8175 (2.0s) | lr 4.242e-04 | updates 84375/281250
+Ep 46 | train_loss 0.5450, acc 0.7919 (36.9s) | val_loss 0.5381, acc 0.8026 (2.1s) | lr 4.202e-04 | updates 86250/281250
+Ep 47 | train_loss 0.5458, acc 0.7921 (36.8s) | val_loss 0.5088, acc 0.8128 (2.1s) | lr 4.162e-04 | updates 88125/281250
+Ep 48 | train_loss 0.5448, acc 0.7933 (36.7s) | val_loss 0.5012, acc 0.8135 (2.1s) | lr 4.121e-04 | updates 90000/281250
+Ep 49 | train_loss 0.5508, acc 0.7899 (36.8s) | val_loss 0.5132, acc 0.8047 (2.1s) | lr 4.081e-04 | updates 91875/281250
+Ep 50 | train_loss 0.5500, acc 0.7905 (36.8s) | val_loss 0.5265, acc 0.7942 (2.0s) | lr 4.040e-04 | updates 93750/281250
+Ep 51 | train_loss 0.5593, acc 0.7866 (36.8s) | val_loss 0.5494, acc 0.7913 (2.1s) | lr 4.000e-04 | updates 95625/281250
+Ep 52 | train_loss 0.5565, acc 0.7882 (36.7s) | val_loss 0.5314, acc 0.7947 (2.0s) | lr 3.960e-04 | updates 97500/281250
+Ep 53 | train_loss 0.5567, acc 0.7886 (36.9s) | val_loss 0.5307, acc 0.7980 (2.1s) | lr 3.919e-04 | updates 99375/281250
+Ep 54 | train_loss 0.5559, acc 0.7866 (36.7s) | val_loss 0.4820, acc 0.8141 (2.1s) | lr 3.879e-04 | updates 101250/281250
+Ep 55 | train_loss 0.5552, acc 0.7890 (36.6s) | val_loss 0.5078, acc 0.8099 (2.0s) | lr 3.838e-04 | updates 103125/281250
+Ep 56 | train_loss 0.5514, acc 0.7900 (36.6s) | val_loss 0.4934, acc 0.8143 (2.1s) | lr 3.798e-04 | updates 105000/281250
+Ep 57 | train_loss 0.5479, acc 0.7933 (36.8s) | val_loss 0.5255, acc 0.8006 (2.1s) | lr 3.758e-04 | updates 106875/281250
+Ep 58 | train_loss 0.5443, acc 0.7942 (36.7s) | val_loss 0.4865, acc 0.8160 (2.1s) | lr 3.717e-04 | updates 108750/281250
+Ep 59 | train_loss 0.5460, acc 0.7944 (36.9s) | val_loss 0.5246, acc 0.8052 (2.1s) | lr 3.677e-04 | updates 110625/281250
+Ep 60 | train_loss 0.5453, acc 0.7921 (36.8s) | val_loss 0.5376, acc 0.8019 (2.1s) | lr 3.636e-04 | updates 112500/281250
+Ep 61 | train_loss 0.5432, acc 0.7930 (36.7s) | val_loss 0.5173, acc 0.8043 (2.1s) | lr 3.596e-04 | updates 114375/281250
+Ep 62 | train_loss 0.5413, acc 0.7940 (36.9s) | val_loss 0.5244, acc 0.7980 (2.1s) | lr 3.556e-04 | updates 116250/281250
+Ep 63 | train_loss 0.5397, acc 0.7928 (36.6s) | val_loss 0.5338, acc 0.8002 (2.0s) | lr 3.515e-04 | updates 118125/281250
+Ep 64 | train_loss 0.5405, acc 0.7941 (36.8s) | val_loss 0.4828, acc 0.8114 (2.1s) | lr 3.475e-04 | updates 120000/281250
+Ep 65 | train_loss 0.5349, acc 0.7963 (36.7s) | val_loss 0.5041, acc 0.8141 (2.0s) | lr 3.434e-04 | updates 121875/281250
+Ep 66 | train_loss 0.5360, acc 0.7969 (36.7s) | val_loss 0.4892, acc 0.8203 (2.1s) | lr 3.394e-04 | updates 123750/281250
+Ep 67 | train_loss 0.5361, acc 0.7948 (36.7s) | val_loss 0.4947, acc 0.8123 (2.1s) | lr 3.354e-04 | updates 125625/281250
+Ep 68 | train_loss 0.5328, acc 0.7974 (36.7s) | val_loss 0.4941, acc 0.8125 (2.1s) | lr 3.313e-04 | updates 127500/281250
+Ep 69 | train_loss 0.5307, acc 0.7965 (36.7s) | val_loss 0.5079, acc 0.8120 (2.1s) | lr 3.273e-04 | updates 129375/281250
+Ep 70 | train_loss 0.5287, acc 0.8000 (36.7s) | val_loss 0.4787, acc 0.8172 (2.0s) | lr 3.232e-04 | updates 131250/281250
+Ep 71 | train_loss 0.5289, acc 0.8003 (36.6s) | val_loss 0.4699, acc 0.8203 (2.0s) | lr 3.192e-04 | updates 133125/281250
+Ep 72 | train_loss 0.5240, acc 0.8012 (36.8s) | val_loss 0.4744, acc 0.8176 (2.1s) | lr 3.151e-04 | updates 135000/281250
+Ep 73 | train_loss 0.5261, acc 0.8001 (36.7s) | val_loss 0.4726, acc 0.8203 (2.0s) | lr 3.111e-04 | updates 136875/281250
+Ep 74 | train_loss 0.5189, acc 0.8035 (36.8s) | val_loss 0.4836, acc 0.8205 (2.0s) | lr 3.071e-04 | updates 138750/281250
+Ep 75 | train_loss 0.5183, acc 0.8015 (36.7s) | val_loss 0.4613, acc 0.8265 (2.1s) | lr 3.030e-04 | updates 140625/281250
+Ep 76 | train_loss 0.5195, acc 0.8014 (36.7s) | val_loss 0.4736, acc 0.8207 (2.0s) | lr 2.990e-04 | updates 142500/281250
+Ep 77 | train_loss 0.5109, acc 0.8042 (36.7s) | val_loss 0.4883, acc 0.8163 (2.0s) | lr 2.949e-04 | updates 144375/281250
+Ep 78 | train_loss 0.5111, acc 0.8061 (36.8s) | val_loss 0.4889, acc 0.8137 (2.1s) | lr 2.909e-04 | updates 146250/281250
+Ep 79 | train_loss 0.5169, acc 0.8043 (36.7s) | val_loss 0.5079, acc 0.8044 (2.1s) | lr 2.869e-04 | updates 148125/281250
+Ep 80 | train_loss 0.5090, acc 0.8069 (36.8s) | val_loss 0.5114, acc 0.8044 (2.1s) | lr 2.828e-04 | updates 150000/281250
+Ep 81 | train_loss 0.5143, acc 0.8054 (36.7s) | val_loss 0.4867, acc 0.8134 (2.1s) | lr 2.788e-04 | updates 151875/281250
+Ep 82 | train_loss 0.5120, acc 0.8053 (36.7s) | val_loss 0.4850, acc 0.8171 (2.1s) | lr 2.747e-04 | updates 153750/281250
+Ep 83 | train_loss 0.5116, acc 0.8073 (36.8s) | val_loss 0.4835, acc 0.8144 (2.1s) | lr 2.707e-04 | updates 155625/281250
+Ep 84 | train_loss 0.5066, acc 0.8049 (36.8s) | val_loss 0.4790, acc 0.8191 (2.1s) | lr 2.667e-04 | updates 157500/281250
+Ep 85 | train_loss 0.5044, acc 0.8068 (36.7s) | val_loss 0.4894, acc 0.8120 (2.1s) | lr 2.626e-04 | updates 159375/281250
+Ep 86 | train_loss 0.5034, acc 0.8091 (36.8s) | val_loss 0.4672, acc 0.8264 (2.1s) | lr 2.586e-04 | updates 161250/281250
+Ep 87 | train_loss 0.5058, acc 0.8071 (36.8s) | val_loss 0.4861, acc 0.8233 (2.1s) | lr 2.545e-04 | updates 163125/281250
+Ep 88 | train_loss 0.4984, acc 0.8100 (36.7s) | val_loss 0.4686, acc 0.8223 (2.0s) | lr 2.505e-04 | updates 165000/281250
+Ep 89 | train_loss 0.4971, acc 0.8097 (36.7s) | val_loss 0.4528, acc 0.8295 (2.0s) | lr 2.465e-04 | updates 166875/281250
+Ep 90 | train_loss 0.4949, acc 0.8127 (36.7s) | val_loss 0.4679, acc 0.8313 (2.1s) | lr 2.424e-04 | updates 168750/281250
+Ep 91 | train_loss 0.4939, acc 0.8121 (36.8s) | val_loss 0.4994, acc 0.8108 (2.1s) | lr 2.384e-04 | updates 170625/281250
+Ep 92 | train_loss 0.4928, acc 0.8117 (36.8s) | val_loss 0.4401, acc 0.8306 (2.1s) | lr 2.343e-04 | updates 172500/281250
+Ep 93 | train_loss 0.4888, acc 0.8143 (36.7s) | val_loss 0.4447, acc 0.8269 (2.1s) | lr 2.303e-04 | updates 174375/281250
+Ep 94 | train_loss 0.4900, acc 0.8132 (36.7s) | val_loss 0.4948, acc 0.8160 (2.1s) | lr 2.263e-04 | updates 176250/281250
+Ep 95 | train_loss 0.4871, acc 0.8151 (36.8s) | val_loss 0.4678, acc 0.8224 (2.0s) | lr 2.222e-04 | updates 178125/281250
+Ep 96 | train_loss 0.4870, acc 0.8143 (36.8s) | val_loss 0.4513, acc 0.8310 (2.1s) | lr 2.182e-04 | updates 180000/281250
+Ep 97 | train_loss 0.4881, acc 0.8147 (36.8s) | val_loss 0.4543, acc 0.8225 (2.1s) | lr 2.141e-04 | updates 181875/281250
+Ep 98 | train_loss 0.4865, acc 0.8137 (36.8s) | val_loss 0.4505, acc 0.8280 (2.1s) | lr 2.101e-04 | updates 183750/281250
+Ep 99 | train_loss 0.4870, acc 0.8143 (36.7s) | val_loss 0.4360, acc 0.8322 (2.1s) | lr 2.061e-04 | updates 185625/281250
+Ep100 | train_loss 0.4819, acc 0.8157 (36.7s) | val_loss 0.4539, acc 0.8279 (2.1s) | lr 2.020e-04 | updates 187500/281250
+Ep101 | train_loss 0.4789, acc 0.8189 (36.7s) | val_loss 0.4460, acc 0.8299 (2.0s) | lr 1.980e-04 | updates 189375/281250
+Ep102 | train_loss 0.4797, acc 0.8162 (36.7s) | val_loss 0.4381, acc 0.8315 (2.1s) | lr 1.939e-04 | updates 191250/281250
+Ep103 | train_loss 0.4754, acc 0.8170 (36.9s) | val_loss 0.4580, acc 0.8258 (2.1s) | lr 1.899e-04 | updates 193125/281250
+Ep104 | train_loss 0.4788, acc 0.8158 (36.7s) | val_loss 0.4395, acc 0.8291 (2.1s) | lr 1.859e-04 | updates 195000/281250
+Ep105 | train_loss 0.4766, acc 0.8179 (36.8s) | val_loss 0.4402, acc 0.8302 (2.1s) | lr 1.818e-04 | updates 196875/281250
+Ep106 | train_loss 0.4765, acc 0.8194 (36.7s) | val_loss 0.4549, acc 0.8245 (2.1s) | lr 1.778e-04 | updates 198750/281250
+Ep107 | train_loss 0.4712, acc 0.8193 (36.8s) | val_loss 0.4431, acc 0.8291 (2.1s) | lr 1.737e-04 | updates 200625/281250
+Ep108 | train_loss 0.4760, acc 0.8193 (36.8s) | val_loss 0.4302, acc 0.8367 (2.0s) | lr 1.697e-04 | updates 202500/281250
+Ep109 | train_loss 0.4704, acc 0.8204 (36.9s) | val_loss 0.4626, acc 0.8264 (2.1s) | lr 1.657e-04 | updates 204375/281250
+Ep110 | train_loss 0.4698, acc 0.8216 (36.7s) | val_loss 0.4572, acc 0.8265 (2.1s) | lr 1.616e-04 | updates 206250/281250
+Ep111 | train_loss 0.4684, acc 0.8213 (36.8s) | val_loss 0.4514, acc 0.8313 (2.1s) | lr 1.576e-04 | updates 208125/281250
+Ep112 | train_loss 0.4645, acc 0.8237 (36.7s) | val_loss 0.4353, acc 0.8286 (2.1s) | lr 1.535e-04 | updates 210000/281250
+Ep113 | train_loss 0.4607, acc 0.8249 (36.8s) | val_loss 0.4378, acc 0.8338 (2.1s) | lr 1.495e-04 | updates 211875/281250
+Ep114 | train_loss 0.4598, acc 0.8255 (36.7s) | val_loss 0.4203, acc 0.8391 (2.0s) | lr 1.455e-04 | updates 213750/281250
+Ep115 | train_loss 0.4551, acc 0.8259 (36.8s) | val_loss 0.4213, acc 0.8407 (2.0s) | lr 1.414e-04 | updates 215625/281250
+Ep116 | train_loss 0.4585, acc 0.8252 (36.7s) | val_loss 0.4208, acc 0.8380 (2.1s) | lr 1.374e-04 | updates 217500/281250
+Ep117 | train_loss 0.4542, acc 0.8254 (36.8s) | val_loss 0.4259, acc 0.8392 (2.1s) | lr 1.333e-04 | updates 219375/281250
+Ep118 | train_loss 0.4550, acc 0.8278 (36.7s) | val_loss 0.4400, acc 0.8372 (2.1s) | lr 1.293e-04 | updates 221250/281250
+Ep119 | train_loss 0.4490, acc 0.8278 (36.8s) | val_loss 0.4130, acc 0.8422 (2.1s) | lr 1.253e-04 | updates 223125/281250
+Ep120 | train_loss 0.4511, acc 0.8269 (36.9s) | val_loss 0.4201, acc 0.8367 (2.1s) | lr 1.212e-04 | updates 225000/281250
+Ep121 | train_loss 0.4494, acc 0.8268 (36.8s) | val_loss 0.4188, acc 0.8382 (2.1s) | lr 1.172e-04 | updates 226875/281250
+Ep122 | train_loss 0.4452, acc 0.8315 (36.7s) | val_loss 0.4435, acc 0.8318 (2.0s) | lr 1.131e-04 | updates 228750/281250
+Ep123 | train_loss 0.4449, acc 0.8314 (36.6s) | val_loss 0.4142, acc 0.8413 (2.1s) | lr 1.091e-04 | updates 230625/281250
+Ep124 | train_loss 0.4393, acc 0.8322 (36.9s) | val_loss 0.4107, acc 0.8430 (2.1s) | lr 1.050e-04 | updates 232500/281250
+Ep125 | train_loss 0.4387, acc 0.8327 (36.6s) | val_loss 0.4116, acc 0.8441 (2.1s) | lr 1.010e-04 | updates 234375/281250
+Ep126 | train_loss 0.4352, acc 0.8350 (36.7s) | val_loss 0.4128, acc 0.8428 (2.1s) | lr 9.697e-05 | updates 236250/281250
+Ep127 | train_loss 0.4341, acc 0.8334 (36.6s) | val_loss 0.4095, acc 0.8427 (2.1s) | lr 9.293e-05 | updates 238125/281250
+Ep128 | train_loss 0.4355, acc 0.8327 (36.7s) | val_loss 0.4010, acc 0.8465 (2.1s) | lr 8.889e-05 | updates 240000/281250
+Ep129 | train_loss 0.4302, acc 0.8344 (36.8s) | val_loss 0.4250, acc 0.8347 (2.1s) | lr 8.485e-05 | updates 241875/281250
+Ep130 | train_loss 0.4269, acc 0.8383 (36.8s) | val_loss 0.4047, acc 0.8453 (2.1s) | lr 8.081e-05 | updates 243750/281250
+Ep131 | train_loss 0.4253, acc 0.8366 (36.8s) | val_loss 0.4088, acc 0.8478 (2.1s) | lr 7.677e-05 | updates 245625/281250
+Ep132 | train_loss 0.4211, acc 0.8382 (36.7s) | val_loss 0.3926, acc 0.8506 (2.1s) | lr 7.272e-05 | updates 247500/281250
+Ep133 | train_loss 0.4233, acc 0.8389 (36.8s) | val_loss 0.4037, acc 0.8466 (2.1s) | lr 6.868e-05 | updates 249375/281250
+Ep134 | train_loss 0.4218, acc 0.8390 (36.8s) | val_loss 0.3871, acc 0.8524 (2.1s) | lr 6.464e-05 | updates 251250/281250
+Ep135 | train_loss 0.4166, acc 0.8395 (36.7s) | val_loss 0.4057, acc 0.8459 (2.1s) | lr 6.060e-05 | updates 253125/281250
+Ep136 | train_loss 0.4154, acc 0.8399 (36.8s) | val_loss 0.4236, acc 0.8392 (2.1s) | lr 5.656e-05 | updates 255000/281250
+Ep137 | train_loss 0.4131, acc 0.8434 (36.6s) | val_loss 0.3995, acc 0.8471 (2.0s) | lr 5.252e-05 | updates 256875/281250
+Ep138 | train_loss 0.4063, acc 0.8447 (36.7s) | val_loss 0.4141, acc 0.8453 (2.0s) | lr 4.848e-05 | updates 258750/281250
+Ep139 | train_loss 0.4068, acc 0.8448 (36.7s) | val_loss 0.3996, acc 0.8497 (2.1s) | lr 4.444e-05 | updates 260625/281250
+Ep140 | train_loss 0.4031, acc 0.8458 (36.7s) | val_loss 0.3965, acc 0.8480 (2.1s) | lr 4.040e-05 | updates 262500/281250
+Ep141 | train_loss 0.4012, acc 0.8463 (36.7s) | val_loss 0.3822, acc 0.8547 (2.1s) | lr 3.636e-05 | updates 264375/281250
+Ep142 | train_loss 0.3926, acc 0.8513 (36.6s) | val_loss 0.3971, acc 0.8521 (2.1s) | lr 3.232e-05 | updates 266250/281250
+Ep143 | train_loss 0.3922, acc 0.8506 (36.7s) | val_loss 0.3829, acc 0.8526 (2.1s) | lr 2.828e-05 | updates 268125/281250
+Ep144 | train_loss 0.3895, acc 0.8505 (36.8s) | val_loss 0.3886, acc 0.8542 (2.1s) | lr 2.424e-05 | updates 270000/281250
+Ep145 | train_loss 0.3849, acc 0.8539 (36.7s) | val_loss 0.3841, acc 0.8543 (2.1s) | lr 2.020e-05 | updates 271875/281250
+Ep146 | train_loss 0.3807, acc 0.8547 (36.7s) | val_loss 0.3728, acc 0.8564 (2.0s) | lr 1.616e-05 | updates 273750/281250
+Ep147 | train_loss 0.3807, acc 0.8550 (36.8s) | val_loss 0.3786, acc 0.8572 (2.1s) | lr 1.212e-05 | updates 275625/281250
+Ep148 | train_loss 0.3743, acc 0.8568 (36.6s) | val_loss 0.3745, acc 0.8582 (2.1s) | lr 8.079e-06 | updates 277500/281250
+Ep149 | train_loss 0.3703, acc 0.8582 (36.8s) | val_loss 0.3714, acc 0.8571 (2.1s) | lr 4.038e-06 | updates 279375/281250
+Ep150 | train_loss 0.3678, acc 0.8595 (36.8s) | val_loss 0.3710, acc 0.8581 (2.1s) | lr -2.155e-09 | updates 281250/281250
+------------------------------------------------------------------------
+Log saved to: /mnt/drive7/projects/my_project/RACE_Attention/trial_exact_flash_K2_L5_M1_VIT.txt

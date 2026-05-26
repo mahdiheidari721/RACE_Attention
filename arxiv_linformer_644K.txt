@@ -1,0 +1,37 @@
+Attn: linformer, Epochs: 33
+--------------------------------------------------------------------------------
+Ep  1 | train_loss 2.4397, acc 0.1203 (347.4s) | val_loss 2.1174, acc 0.2680 (15.6s) | lr 9.185e-05 | updates 108/3564
+Ep  2 | train_loss 1.2738, acc 0.5495 (347.5s) | val_loss 1.1784, acc 0.6239 (15.6s) | lr 1.829e-04 | updates 216/3564
+Ep  3 | train_loss 0.7470, acc 0.7424 (347.4s) | val_loss 0.8354, acc 0.6892 (15.6s) | lr 2.739e-04 | updates 324/3564
+Ep  4 | train_loss 0.5520, acc 0.8272 (347.3s) | val_loss 0.5735, acc 0.8131 (15.6s) | lr 2.928e-04 | updates 432/3564
+Ep  5 | train_loss 0.3239, acc 0.8977 (347.3s) | val_loss 0.3658, acc 0.8739 (15.6s) | lr 2.827e-04 | updates 540/3564
+Ep  6 | train_loss 0.2215, acc 0.9301 (347.1s) | val_loss 0.4597, acc 0.8423 (15.6s) | lr 2.726e-04 | updates 648/3564
+Ep  7 | train_loss 0.2562, acc 0.9216 (347.3s) | val_loss 0.5081, acc 0.8356 (15.5s) | lr 2.625e-04 | updates 756/3564
+Ep  8 | train_loss 0.2520, acc 0.9219 (347.1s) | val_loss 0.5204, acc 0.8468 (15.6s) | lr 2.524e-04 | updates 864/3564
+Ep  9 | train_loss 0.2221, acc 0.9341 (347.2s) | val_loss 0.3527, acc 0.8851 (15.6s) | lr 2.423e-04 | updates 972/3564
+Ep 10 | train_loss 0.1692, acc 0.9473 (347.2s) | val_loss 0.2476, acc 0.9212 (15.6s) | lr 2.322e-04 | updates 1080/3564
+Ep 11 | train_loss 0.0881, acc 0.9741 (347.1s) | val_loss 0.2923, acc 0.9122 (15.6s) | lr 2.221e-04 | updates 1188/3564
+Ep 12 | train_loss 0.0969, acc 0.9706 (347.1s) | val_loss 0.3233, acc 0.9144 (15.5s) | lr 2.120e-04 | updates 1296/3564
+Ep 13 | train_loss 0.0730, acc 0.9796 (347.1s) | val_loss 0.3455, acc 0.9279 (15.6s) | lr 2.019e-04 | updates 1404/3564
+Ep 14 | train_loss 0.0623, acc 0.9805 (347.0s) | val_loss 0.2585, acc 0.9167 (15.5s) | lr 1.918e-04 | updates 1512/3564
+Ep 15 | train_loss 0.0508, acc 0.9837 (347.0s) | val_loss 0.2296, acc 0.9369 (15.6s) | lr 1.817e-04 | updates 1620/3564
+Ep 16 | train_loss 0.0938, acc 0.9703 (347.0s) | val_loss 0.2335, acc 0.9324 (15.5s) | lr 1.716e-04 | updates 1728/3564
+Ep 17 | train_loss 0.0417, acc 0.9892 (347.0s) | val_loss 0.2325, acc 0.9437 (15.5s) | lr 1.615e-04 | updates 1836/3564
+Ep 18 | train_loss 0.0452, acc 0.9881 (347.1s) | val_loss 0.3181, acc 0.9212 (15.5s) | lr 1.514e-04 | updates 1944/3564
+Ep 19 | train_loss 0.0391, acc 0.9898 (346.9s) | val_loss 0.2432, acc 0.9414 (15.6s) | lr 1.413e-04 | updates 2052/3564
+Ep 20 | train_loss 0.0238, acc 0.9927 (347.0s) | val_loss 0.2326, acc 0.9459 (15.5s) | lr 1.312e-04 | updates 2160/3564
+Ep 21 | train_loss 0.0270, acc 0.9933 (347.1s) | val_loss 0.2804, acc 0.9324 (15.5s) | lr 1.211e-04 | updates 2268/3564
+Ep 22 | train_loss 0.0166, acc 0.9953 (347.0s) | val_loss 0.2250, acc 0.9437 (15.5s) | lr 1.110e-04 | updates 2376/3564
+Ep 23 | train_loss 0.0143, acc 0.9956 (347.0s) | val_loss 0.3516, acc 0.9144 (15.6s) | lr 1.009e-04 | updates 2484/3564
+Ep 24 | train_loss 0.0191, acc 0.9945 (347.0s) | val_loss 0.2001, acc 0.9550 (15.5s) | lr 9.080e-05 | updates 2592/3564
+Ep 25 | train_loss 0.0108, acc 0.9962 (347.0s) | val_loss 0.2489, acc 0.9437 (15.6s) | lr 8.070e-05 | updates 2700/3564
+Ep 26 | train_loss 0.0207, acc 0.9948 (347.0s) | val_loss 0.2570, acc 0.9414 (15.6s) | lr 7.060e-05 | updates 2808/3564
+Ep 27 | train_loss 0.0117, acc 0.9968 (347.0s) | val_loss 0.2250, acc 0.9505 (15.6s) | lr 6.050e-05 | updates 2916/3564
+Ep 28 | train_loss 0.0068, acc 0.9980 (347.0s) | val_loss 0.1679, acc 0.9595 (15.6s) | lr 5.041e-05 | updates 3024/3564
+Ep 29 | train_loss 0.0053, acc 0.9980 (347.0s) | val_loss 0.2435, acc 0.9414 (15.6s) | lr 4.031e-05 | updates 3132/3564
+Ep 30 | train_loss 0.0045, acc 0.9988 (347.1s) | val_loss 0.1984, acc 0.9550 (15.6s) | lr 3.021e-05 | updates 3240/3564
+Ep 31 | train_loss 0.0057, acc 0.9988 (347.0s) | val_loss 0.1535, acc 0.9707 (15.5s) | lr 2.011e-05 | updates 3348/3564
+Ep 32 | train_loss 0.0024, acc 0.9994 (346.9s) | val_loss 0.1529, acc 0.9685 (15.6s) | lr 1.001e-05 | updates 3456/3564
+Ep 33 | train_loss 0.0020, acc 0.9994 (347.0s) | val_loss 0.1646, acc 0.9662 (15.6s) | lr -9.352e-08 | updates 3564/3564
+--------------------------------------------------------------------------------
+Log saved to: /mnt/drive7/projects/my_project/RACE_Attention/arxiv_linformer_644K.txt

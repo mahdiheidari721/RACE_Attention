@@ -1,0 +1,12 @@
+Attn: hyper_global_local_lsh_race, Epochs: 150
+--------------------------------------------------------------------------------
+Ep  1 | train_loss 4.4977, acc 0.0304 (1121.9s) | val_loss 4.2030, acc 0.0382 (405.5s) | lr 4.021e-04 | updates 255/38250
+Ep  2 | train_loss 4.2050, acc 0.0461 (1118.5s) | val_loss 3.9519, acc 0.0765 (405.0s) | lr 5.980e-04 | updates 510/38250
+Ep  3 | train_loss 3.9600, acc 0.0569 (1115.8s) | val_loss 3.7403, acc 0.0941 (404.5s) | lr 5.939e-04 | updates 765/38250
+Ep  4 | train_loss 3.7251, acc 0.0912 (1117.8s) | val_loss 3.6137, acc 0.1206 (408.2s) | lr 5.899e-04 | updates 1020/38250
+Ep  5 | train_loss 3.5796, acc 0.1049 (1118.9s) | val_loss 3.3625, acc 0.1647 (403.9s) | lr 5.858e-04 | updates 1275/38250
+Ep  6 | train_loss 3.3749, acc 0.1402 (1115.1s) | val_loss 3.3553, acc 0.1598 (404.7s) | lr 5.818e-04 | updates 1530/38250
+Ep  7 | train_loss 3.3741, acc 0.1529 (1117.9s) | val_loss 3.3629, acc 0.1578 (407.3s) | lr 5.778e-04 | updates 1785/38250
+Ep  8 | train_loss 3.2420, acc 0.1549 (1122.3s) | val_loss 3.2595, acc 0.1892 (405.0s) | lr 5.737e-04 | updates 2040/38250
+Ep  9 | train_loss 3.1855, acc 0.1804 (1126.5s) | val_loss 3.2111, acc 0.1843 (404.1s) | lr 5.697e-04 | updates 2295/38250
+Ep 10 | train_loss 3.1391, acc 0.1824 (1116.7s) | val_loss 3.2335, acc 0.1843 (403.7s) | lr 5.656e-04 | updates 2550/38250

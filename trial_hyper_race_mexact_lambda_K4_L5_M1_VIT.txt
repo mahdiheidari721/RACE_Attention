@@ -1,0 +1,6 @@
+Epochs: 150
+------------------------------------------------------------------------
+Ep  1 | train_loss 4.5036, acc 0.0294 (30.0s) | val_loss 4.2449, acc 0.0500 (12.4s) | lr 4.008e-04 | updates 510/76500
+Ep  2 | train_loss 4.2333, acc 0.0471 (31.3s) | val_loss 3.9631, acc 0.0784 (12.6s) | lr 5.980e-04 | updates 1020/76500
+Ep  3 | train_loss 3.9342, acc 0.0696 (29.6s) | val_loss 3.7943, acc 0.0824 (12.7s) | lr 5.939e-04 | updates 1530/76500
+Ep  4 | train_loss 3.7264, acc 0.0912 (29.8s) | val_loss 3.7031, acc 0.1314 (12.7s) | lr 5.899e-04 | updates 2040/76500

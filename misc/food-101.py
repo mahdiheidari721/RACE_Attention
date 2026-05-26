@@ -1,6 +1,7 @@
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import torch 
+import wandb
 import torchvision
 import matplotlib.pyplot as plt
 import torch.utils.data as dataloader
@@ -24,7 +25,7 @@ from torchvision.datasets import Food101
 
 
 VISION_CONFIG = {
-    "batch_size": 1,
+    "batch_size": 4,
     "img_size": 512,          # 512 × 512 images
     "patch_size": 4,          # 4 × 4 patches
     "num_channels": 3,
@@ -39,6 +40,15 @@ VISION_CONFIG = {
     "K": 4,
     "L": 4,
     "M": 1,
+        # Hyper-LSH exact sparse branch
+    "hyper_num_bits": 5,          # 32 buckets
+    "hyper_block_size": 256,
+    "hyper_min_seq_len": 4096,
+    "hyper_neighbor_blocks": 0,   # start with 0, try 1 if needed
+
+    # Tiny gate MLP for hyper_race
+    "gate_hidden_dim": 128,
+    "gate_normalize": True,
 }
 
 IMNET_MEAN = [0.485, 0.456, 0.406]
@@ -199,7 +209,54 @@ class MultiHeadAttention(nn.Module):
         out = self.dropout(out)
         out = out.to(self.out_proj.weight.dtype)
         return self.out_proj(out)
-    
+def _gray_code_order(num_bits: int, device):
+    """
+    Gray-code order for bucket IDs.
+    Adjacent IDs differ by one bit.
+    """
+    if num_bits == 1:
+        return torch.tensor([0, 1], device=device, dtype=torch.long)
+
+    def rec(n):
+        if n == 1:
+            return torch.tensor([0, 1], device=device, dtype=torch.long)
+        a = rec(n - 1)
+        return torch.cat([a, torch.flip(a, dims=[0]) + (1 << (n - 1))], dim=0)
+
+    return rec(num_bits)
+
+
+def _gather_tokens_3d(x: torch.Tensor, idx: torch.Tensor):
+    """
+    x   : [H, T, D]
+    idx : [H, S]
+    out : [H, S, D]
+    """
+    return x.gather(1, idx.unsqueeze(-1).expand(-1, -1, x.size(-1)))
+
+
+def _run_exact_sdpa(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor):
+    """
+    Q, K, V : [B', H', L, D]
+    returns : [B', H', L, D]
+
+    Uses PyTorch SDPA with FlashAttention backend if available.
+    """
+    if Q.device.type == "cuda":
+        Q16, K16, V16 = [t.to(dtype=torch.float16) for t in (Q, K, V)]
+        with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
+            out = F.scaled_dot_product_attention(
+                Q16, K16, V16,
+                dropout_p=0.0,
+                is_causal=False,
+            )
+        return out.to(Q.dtype)
+    else:
+        return F.scaled_dot_product_attention(
+            Q, K, V,
+            dropout_p=0.0,
+            is_causal=False,
+        )    
 class TransformerArchitecture(nn.Module):
     def __init__(self, cfg):
         super().__init__()
@@ -220,7 +277,243 @@ class TransformerArchitecture(nn.Module):
         mlp_output = self.multi_layer_perceptron(self.layer_norm_2(x))
         x = mlp_output + residual_2
         return x
+class AngularLSHGray(nn.Module):
+    """
+    Hard angular LSH with Gray-code bucket ordering.
+    """
+    def __init__(self, num_bits: int, dim: int, device="cpu"):
+        super().__init__()
+        self.num_bits = num_bits
+        self.R = 1 << num_bits
 
+        proj_dir = torch.randn(dim, num_bits, device=device)
+        perm = _gray_code_order(num_bits, device=device)
+
+        self.register_buffer("proj_dir", proj_dir, persistent=False)  # [D, num_bits]
+        self.register_buffer("perm", perm, persistent=False)          # [2^num_bits]
+
+    def hash(self, mat: torch.Tensor):
+        """
+        mat: [H, T, D] or [B, H, T, D]
+        returns bucket IDs with same leading dims except D -> bucket id
+        """
+        proj = torch.einsum("...td,dr->...tr", mat, self.proj_dir)  # [..., T, num_bits]
+        bits = (proj > 0).to(torch.long)
+
+        enc = (2 ** torch.arange(self.num_bits, device=mat.device, dtype=torch.long)).view(
+            *([1] * (bits.ndim - 1)), self.num_bits
+        )
+        bin_ids = (bits * enc).sum(dim=-1)
+        return self.perm[bin_ids]
+
+
+class HyperLSHExactAttentionVision(nn.Module):
+    """
+    HyperAttention-style exact sparse attention for vision tokens:
+
+    - hard angular LSH on Q and K
+    - sort Q by query buckets
+    - sort K and V by key buckets
+    - compute exact dense attention on aligned sorted blocks
+    - inverse-permute query outputs back to original order
+    """
+    def __init__(
+        self,
+        d_in,
+        d_out,
+        dropout,
+        num_heads,
+        num_bits=7,
+        block_size=256,
+        min_seq_len=4096,
+        neighbor_blocks=0,
+        qkv_bias=False,
+        device="cpu",
+    ):
+        super().__init__()
+        assert d_out % num_heads == 0
+        self.num_heads = num_heads
+        self.head_dim = d_out // num_heads
+        self.block_size = block_size
+        self.min_seq_len = min_seq_len
+        self.neighbor_blocks = neighbor_blocks
+
+        self.W_query = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.W_key   = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.W_value = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.out_proj = nn.Linear(d_out, d_out)
+        self.dropout = nn.Dropout(dropout)
+
+        self.lsh = AngularLSHGray(num_bits=num_bits, dim=self.head_dim, device=device)
+
+    def _full_sdpa_fallback(self, Qh, Kh, Vh):
+        # Qh,Kh,Vh: [H, T, D]
+        return _run_exact_sdpa(
+            Qh.unsqueeze(0),  # [1,H,T,D]
+            Kh.unsqueeze(0),
+            Vh.unsqueeze(0),
+        )[0]
+
+    def _same_block_exact(self, Qs, Ks, Vs, T_valid):
+        """
+        Exact attention only within aligned blocks after sorting.
+        """
+        H, T, D = Qs.shape
+        bsz = self.block_size
+
+        num_full_blocks = T_valid // bsz
+        rem = T_valid % bsz
+        out_sorted = torch.zeros_like(Qs)
+
+        if num_full_blocks > 0:
+            T_full = num_full_blocks * bsz
+
+            Q_full = Qs[:, :T_full, :].reshape(H, num_full_blocks, bsz, D)
+            K_full = Ks[:, :T_full, :].reshape(H, num_full_blocks, bsz, D)
+            V_full = Vs[:, :T_full, :].reshape(H, num_full_blocks, bsz, D)
+
+            # flatten (head, block) into batch dimension
+            Q_flat = Q_full.reshape(H * num_full_blocks, 1, bsz, D)
+            K_flat = K_full.reshape(H * num_full_blocks, 1, bsz, D)
+            V_flat = V_full.reshape(H * num_full_blocks, 1, bsz, D)
+
+            O_flat = _run_exact_sdpa(Q_flat, K_flat, V_flat)
+            O_full = O_flat.reshape(H, num_full_blocks, bsz, D).reshape(H, T_full, D)
+            out_sorted[:, :T_full, :] = O_full
+
+        if rem > 0:
+            q_last = Qs[:, num_full_blocks * bsz:, :]
+            k_last = Ks[:, num_full_blocks * bsz:, :]
+            v_last = Vs[:, num_full_blocks * bsz:, :]
+
+            o_last = _run_exact_sdpa(
+                q_last.unsqueeze(0),
+                k_last.unsqueeze(0),
+                v_last.unsqueeze(0),
+            )[0]
+            out_sorted[:, num_full_blocks * bsz:, :] = o_last
+
+        return out_sorted
+
+    def _neighbor_block_exact(self, Qs, Ks, Vs, T_valid):
+        """
+        Slightly richer mode:
+        query block i attends to key blocks [i-neighbor_blocks ... i+neighbor_blocks]
+        """
+        H, T, D = Qs.shape
+        bsz = self.block_size
+        num_blocks = math.ceil(T_valid / bsz)
+
+        out_sorted = torch.zeros_like(Qs)
+
+        for bi in range(num_blocks):
+            q0 = bi * bsz
+            q1 = min((bi + 1) * bsz, T_valid)
+
+            left = max(0, bi - self.neighbor_blocks)
+            right = min(num_blocks - 1, bi + self.neighbor_blocks)
+
+            k0 = left * bsz
+            k1 = min((right + 1) * bsz, T_valid)
+
+            q_blk = Qs[:, q0:q1, :]
+            k_blk = Ks[:, k0:k1, :]
+            v_blk = Vs[:, k0:k1, :]
+
+            o_blk = _run_exact_sdpa(
+                q_blk.unsqueeze(0),
+                k_blk.unsqueeze(0),
+                v_blk.unsqueeze(0),
+            )[0]
+
+            out_sorted[:, q0:q1, :] = o_blk
+
+        return out_sorted
+
+    def forward(self, x):
+        """
+        x: [B, T, d]
+        """
+        B, T, _ = x.shape
+        H, D = self.num_heads, self.head_dim
+
+        Q = self.W_query(x).view(B, T, H, D).transpose(1, 2).contiguous()  # [B,H,T,D]
+        K = self.W_key(x).view(B, T, H, D).transpose(1, 2).contiguous()
+        V = self.W_value(x).view(B, T, H, D).transpose(1, 2).contiguous()
+
+        out = torch.zeros_like(Q)
+
+        for b in range(B):
+            Qh = Q[b]   # [H,T,D]
+            Kh = K[b]
+            Vh = V[b]
+
+            if T < self.min_seq_len:
+                out[b] = self._full_sdpa_fallback(Qh, Kh, Vh)
+                continue
+
+            q_bucket_ids = self.lsh.hash(Qh)   # [H,T]
+            k_bucket_ids = self.lsh.hash(Kh)   # [H,T]
+
+            q_sort_idx = torch.argsort(q_bucket_ids, dim=1, stable=True)
+            k_sort_idx = torch.argsort(k_bucket_ids, dim=1, stable=True)
+            q_sort_inv = torch.argsort(q_sort_idx, dim=1, stable=True)
+
+            Qs = _gather_tokens_3d(Qh, q_sort_idx)
+            Ks = _gather_tokens_3d(Kh, k_sort_idx)
+            Vs = _gather_tokens_3d(Vh, k_sort_idx)
+
+            if self.neighbor_blocks == 0:
+                O_sorted = self._same_block_exact(Qs, Ks, Vs, T)
+            else:
+                O_sorted = self._neighbor_block_exact(Qs, Ks, Vs, T)
+
+            O_unsorted = O_sorted.gather(
+                1, q_sort_inv.unsqueeze(-1).expand(-1, -1, D)
+            )
+            out[b] = O_unsorted
+
+        out = out.transpose(1, 2).contiguous().view(B, T, H * D)
+        out = self.dropout(out)
+        return self.out_proj(out)
+
+
+class HyperLSHExactBlock(nn.Module):
+    def __init__(self, cfg, device='cpu'):
+        super().__init__()
+        self.att = HyperLSHExactAttentionVision(
+            d_in=cfg["embed_dim"],
+            d_out=cfg["embed_dim"],
+            dropout=cfg["drop_rate"],
+            num_heads=cfg["num_heads"],
+            num_bits=cfg.get("hyper_num_bits", 7),
+            block_size=cfg.get("hyper_block_size", 256),
+            min_seq_len=cfg.get("hyper_min_seq_len", 4096),
+            neighbor_blocks=cfg.get("hyper_neighbor_blocks", 0),
+            qkv_bias=cfg["qkv_bias"],
+            device=device,
+        )
+
+        self.norm1 = nn.LayerNorm(cfg["embed_dim"])
+        self.norm2 = nn.LayerNorm(cfg["embed_dim"])
+        self.ff = nn.Sequential(
+            nn.Linear(cfg["embed_dim"], cfg["mlp_dim"]),
+            nn.GELU(),
+            nn.Linear(cfg["mlp_dim"], cfg["embed_dim"]),
+        )
+        self.drop = nn.Dropout(cfg["drop_rate"])
+
+    def forward(self, x):
+        h = x
+        x = self.norm1(x)
+        x = self.att(x)
+        x = self.drop(x) + h
+
+        h = x
+        x = self.norm2(x)
+        x = self.ff(x)
+        x = self.drop(x) + h
+        return x
 class BatchedACE(nn.Module):
     """
     Non-causal BatchedACE with optional shared planes.
@@ -402,7 +695,102 @@ class RACEBlock(nn.Module):
         x = self.ff(x)
         x = self.drop(x) + h
         return x
+class HyperRaceGatedAttentionVision(nn.Module):
+    """
+    Hybrid attention for vision:
+      - Hyper-LSH exact sparse branch
+      - RACE branch
+      - 2-layer tiny MLP gate -> 2 scalar gates per token
+      - weighted sum of the two outputs
+    """
+    def __init__(self, cfg, device='cpu'):
+        super().__init__()
 
+        d = cfg["embed_dim"]
+        gate_hidden = cfg.get("gate_hidden_dim", 128)
+
+        # Branch 1: Hyper-LSH exact sparse branch
+        self.hyper = HyperLSHExactAttentionVision(
+            d_in=d,
+            d_out=d,
+            dropout=cfg["drop_rate"],
+            num_heads=cfg["num_heads"],
+            num_bits=cfg.get("hyper_num_bits", 7),
+            block_size=cfg.get("hyper_block_size", 256),
+            min_seq_len=cfg.get("hyper_min_seq_len", 4096),
+            neighbor_blocks=cfg.get("hyper_neighbor_blocks", 0),
+            qkv_bias=cfg["qkv_bias"],
+            device=device,
+        )
+
+        # Branch 2: RACE branch
+        self.race = RACEAttention(
+            d_in=d,
+            d_out=d,
+            dropout=cfg["drop_rate"],
+            num_heads=cfg["num_heads"],
+            L=cfg["L"],
+            K=cfg["K"],
+            N_M=cfg["M"],
+            qkv_bias=cfg["qkv_bias"],
+            device=device,
+        )
+
+        # Tiny 2-layer MLP gate: [B,T,d] -> [B,T,2]
+        self.gate_mlp = nn.Sequential(
+            nn.Linear(d, gate_hidden),
+            nn.SiLU(),
+            nn.Linear(gate_hidden, 2),
+        )
+
+        self.normalize_gates = cfg.get("gate_normalize", False)
+        self.last_gates = None
+
+    def forward(self, x):
+        out_hyper = self.hyper(x)   # [B,T,d]
+        out_race  = self.race(x)    # [B,T,d]
+
+        gate_logits = self.gate_mlp(x)       # [B,T,2]
+        gates = torch.sigmoid(gate_logits)   # [B,T,2]
+
+        if self.normalize_gates:
+            gates = gates / (gates.sum(dim=-1, keepdim=True) + 1e-6)
+
+        self.last_gates = gates.detach()
+
+        g_hyper = gates[..., 0:1]   # [B,T,1]
+        g_race  = gates[..., 1:2]   # [B,T,1]
+
+        out = g_hyper * out_hyper + g_race * out_race
+        return out
+
+
+class HyperRaceGatedBlock(nn.Module):
+    def __init__(self, cfg, device='cpu'):
+        super().__init__()
+        self.att = HyperRaceGatedAttentionVision(cfg, device=device)
+
+        self.norm1 = nn.LayerNorm(cfg["embed_dim"])
+        self.norm2 = nn.LayerNorm(cfg["embed_dim"])
+
+        self.ff = nn.Sequential(
+            nn.Linear(cfg["embed_dim"], cfg["mlp_dim"]),
+            nn.GELU(),
+            nn.Linear(cfg["mlp_dim"], cfg["embed_dim"]),
+        )
+        self.drop = nn.Dropout(cfg["drop_rate"])
+
+    def forward(self, x):
+        h = x
+        x = self.norm1(x)
+        x = self.att(x)
+        x = self.drop(x) + h
+
+        h = x
+        x = self.norm2(x)
+        x = self.ff(x)
+        x = self.drop(x) + h
+        return x
 def favorplus_features(x, proj, eps=1e-6):
     """
     FAVOR+ positive random features for softmax kernel.
@@ -787,6 +1175,10 @@ class VisionTransformer(nn.Module):
             AttnBlock = TransformerArchitecture
         elif attn_type == "race":
             AttnBlock = lambda c: RACEBlock(c, device)
+        elif attn_type == "hyper_lsh":
+            AttnBlock = lambda c: HyperLSHExactBlock(c, device)
+        elif attn_type == "hyper_race":
+            AttnBlock = lambda c: HyperRaceGatedBlock(c, device)    
         elif attn_type == "angular":
             AttnBlock = AngularBlock
         elif attn_type == "linear":
@@ -972,7 +1364,39 @@ def train_model_simple(
 
             # current lr (take the first group)
             curr_lr = scheduler.get_last_lr()[0] if hasattr(scheduler, "get_last_lr") else optimizer.param_groups[0]["lr"]
+            extra_logs = {}
+         # Log branch gate values for hyper_race
+            if hasattr(model, "transformer_layers"):
+                for layer_idx, layer in enumerate(model.transformer_layers):
+                    if hasattr(layer, "att") and hasattr(layer.att, "last_gates"):
+                        gates = layer.att.last_gates
+                        if gates is not None:
+                            # gates shape: [B, T, 2]
+                            hyper_g = gates[..., 0]
+                            race_g  = gates[..., 1]
 
+                            extra_logs[f"gates/layer{layer_idx}_hyper_mean"] = hyper_g.mean().item()
+                            extra_logs[f"gates/layer{layer_idx}_race_mean"]  = race_g.mean().item()
+
+                            extra_logs[f"gates/layer{layer_idx}_hyper_std"]  = hyper_g.std().item()
+                            extra_logs[f"gates/layer{layer_idx}_race_std"]   = race_g.std().item()
+
+                            extra_logs[f"gates/layer{layer_idx}_hyper_min"]  = hyper_g.min().item()
+                            extra_logs[f"gates/layer{layer_idx}_race_min"]   = race_g.min().item()
+
+                            extra_logs[f"gates/layer{layer_idx}_hyper_max"]  = hyper_g.max().item()
+                            extra_logs[f"gates/layer{layer_idx}_race_max"]   = race_g.max().item()
+            wandb.log({
+                "epoch": epoch,
+                "train/loss": tr_l,
+                "train/acc": tr_a,
+                "val/loss": va_l,
+                "val/acc": va_a,
+                "lr": curr_lr,
+                "time/train_sec": train_time,
+                "time/val_sec": val_time,
+                **extra_logs,
+            }, step=epoch)
             _log(
                 f,
                 (f"Ep{epoch:3d} | "
@@ -990,11 +1414,89 @@ def train_model_simple(
         "train_time": train_times,  "val_time": val_times,
     }
 
-
 def start_experiment():
-    device = "cuda:2"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     train_loader, val_loader, info = get_data_food101(batch_size=VISION_CONFIG["batch_size"])
+
     num_epochs = 100
+    # ("hyper_lsh", 32),
+    experiments = [
+       
+        #("race", 4),
+        ("hyper_race", 8),
+        
+    ]
+
+    for attn_type, grad_accum in experiments:
+        run = wandb.init(
+            project="RACE",
+            name=f"food101_{attn_type}_{VISION_CONFIG['img_size']}",
+            config={
+                "dataset": "Food101-50class-subset",
+                "attn_type": attn_type,
+                "img_size": VISION_CONFIG["img_size"],
+                "patch_size": VISION_CONFIG["patch_size"],
+                "num_patches": VISION_CONFIG["num_patches"],
+                "embed_dim": VISION_CONFIG["embed_dim"],
+                "num_heads": VISION_CONFIG["num_heads"],
+                "mlp_dim": VISION_CONFIG["mlp_dim"],
+                "transformer_units": VISION_CONFIG["transformer_units"],
+                "batch_size": VISION_CONFIG["batch_size"],
+                "epochs": num_epochs,
+                "lr": 3e-4,
+                "weight_decay": 0.001,
+                "grad_accum_steps": grad_accum,
+                "num_classes": VISION_CONFIG["num_classes"],
+                "K": VISION_CONFIG["K"],
+                "L": VISION_CONFIG["L"],
+                "M": VISION_CONFIG["M"],
+                "hyper_num_bits": VISION_CONFIG.get("hyper_num_bits", None),
+                "hyper_block_size": VISION_CONFIG.get("hyper_block_size", None),
+                "hyper_min_seq_len": VISION_CONFIG.get("hyper_min_seq_len", None),
+                "hyper_neighbor_blocks": VISION_CONFIG.get("hyper_neighbor_blocks", None),
+                "gate_hidden_dim": VISION_CONFIG.get("gate_hidden_dim", None),
+                "gate_normalize": VISION_CONFIG.get("gate_normalize", None),
+                "train_subset_size": info["num_train"],
+                "test_subset_size": info["num_test"],
+            }
+        )
+
+        wandb.define_metric("epoch")
+        wandb.define_metric("train/*", step_metric="epoch")
+        wandb.define_metric("val/*", step_metric="epoch")
+        wandb.define_metric("lr", step_metric="epoch")
+        wandb.define_metric("time/*", step_metric="epoch")
+        wandb.define_metric("val/acc", summary="max")
+        wandb.define_metric("val/loss", summary="min")
+
+        print(f"\n=== Training {attn_type.upper()} ===")
+        torch.manual_seed(123)
+
+        model = VisionTransformer(VISION_CONFIG, attn_type, device=device)
+        model.to(device)
+
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=3e-4,
+            weight_decay=0.01
+        )
+
+        metrics = train_model_simple(
+            model=model,
+            train_loader=train_loader,
+            val_loader=val_loader,
+            optimizer=optimizer,
+            device=device,
+            num_epochs=num_epochs,
+            cfg=VISION_CONFIG,
+            grad_accum_steps=grad_accum
+        )
+
+        wandb.finish()
+#def start_experiment():
+#    device = "cuda:2"
+#    train_loader, val_loader, info = get_data_food101(batch_size=VISION_CONFIG["batch_size"])
+#    num_epochs = 100
 
     # print("Training Softmax model...")
     # torch.manual_seed(123)

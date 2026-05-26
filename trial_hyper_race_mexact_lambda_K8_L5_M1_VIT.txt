@@ -1,0 +1,13 @@
+Epochs: 150
+------------------------------------------------------------------------
+Ep  1 | train_loss 4.4790, acc 0.0324 (62.3s) | val_loss 4.2445, acc 0.0608 (21.0s) | lr 4.008e-04 | updates 510/76500
+Ep  2 | train_loss 4.1768, acc 0.0500 (61.8s) | val_loss 3.9598, acc 0.0892 (19.8s) | lr 5.980e-04 | updates 1020/76500
+Ep  3 | train_loss 3.8826, acc 0.0735 (61.2s) | val_loss 3.6819, acc 0.0922 (20.5s) | lr 5.939e-04 | updates 1530/76500
+Ep  4 | train_loss 3.7294, acc 0.0941 (61.8s) | val_loss 3.5989, acc 0.1127 (20.6s) | lr 5.899e-04 | updates 2040/76500
+Ep  5 | train_loss 3.5550, acc 0.1078 (60.2s) | val_loss 3.5003, acc 0.1402 (20.7s) | lr 5.859e-04 | updates 2550/76500
+Ep  6 | train_loss 3.4028, acc 0.1451 (61.8s) | val_loss 3.3741, acc 0.1725 (20.8s) | lr 5.818e-04 | updates 3060/76500
+Ep  7 | train_loss 3.3098, acc 0.1520 (60.5s) | val_loss 3.4209, acc 0.1569 (20.5s) | lr 5.778e-04 | updates 3570/76500
+Ep  8 | train_loss 3.2018, acc 0.1775 (61.9s) | val_loss 3.1823, acc 0.1980 (20.5s) | lr 5.737e-04 | updates 4080/76500
+Ep  9 | train_loss 3.1522, acc 0.1863 (62.0s) | val_loss 3.0267, acc 0.2343 (19.5s) | lr 5.697e-04 | updates 4590/76500
+Ep 10 | train_loss 3.0823, acc 0.2029 (61.4s) | val_loss 3.0501, acc 0.2255 (20.8s) | lr 5.656e-04 | updates 5100/76500
+Ep 11 | train_loss 3.0470, acc 0.1951 (62.0s) | val_loss 3.1503, acc 0.1912 (20.5s) | lr 5.616e-04 | updates 5610/76500

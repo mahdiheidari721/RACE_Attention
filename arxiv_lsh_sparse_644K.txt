@@ -1,0 +1,41 @@
+Attn: lsh_sparse, Epochs: 33
+--------------------------------------------------------------------------------
+Attn: lsh_sparse, Epochs: 33
+--------------------------------------------------------------------------------
+Attn: lsh_sparse, Epochs: 33
+--------------------------------------------------------------------------------
+Ep  1 | train_loss 2.4500, acc 0.1101 (2279.5s) | val_loss 2.3928, acc 0.1315 (85.5s) | lr 9.270e-05 | updates 54/1782
+Ep  2 | train_loss 2.3115, acc 0.1578 (2308.5s) | val_loss 2.1858, acc 0.1787 (91.2s) | lr 1.837e-04 | updates 108/1782
+Ep  3 | train_loss 1.9818, acc 0.2398 (2406.4s) | val_loss 2.0442, acc 0.2315 (91.5s) | lr 2.747e-04 | updates 162/1782
+Ep  4 | train_loss 1.8399, acc 0.3084 (2410.1s) | val_loss 1.7900, acc 0.3315 (89.1s) | lr 2.927e-04 | updates 216/1782
+Ep  5 | train_loss 1.6929, acc 0.3770 (2366.5s) | val_loss 1.6462, acc 0.4090 (89.0s) | lr 2.826e-04 | updates 270/1782
+Ep  6 | train_loss 1.4506, acc 0.4719 (2410.2s) | val_loss 1.3664, acc 0.4753 (93.3s) | lr 2.725e-04 | updates 324/1782
+Ep  7 | train_loss 1.2108, acc 0.5533 (2499.7s) | val_loss 1.3103, acc 0.5146 (93.8s) | lr 2.624e-04 | updates 378/1782
+Ep  8 | train_loss 1.1521, acc 0.5816 (2464.5s) | val_loss 1.2212, acc 0.5506 (93.5s) | lr 2.523e-04 | updates 432/1782
+Ep  9 | train_loss 1.0486, acc 0.6157 (2493.0s) | val_loss 1.1694, acc 0.5978 (96.4s) | lr 2.422e-04 | updates 486/1782
+Ep 10 | train_loss 0.9571, acc 0.6549 (2536.4s) | val_loss 1.1211, acc 0.6101 (97.3s) | lr 2.321e-04 | updates 540/1782
+Ep 11 | train_loss 0.8580, acc 0.6984 (2582.2s) | val_loss 1.0178, acc 0.6416 (99.9s) | lr 2.220e-04 | updates 594/1782
+Ep 12 | train_loss 0.8211, acc 0.7047 (2603.8s) | val_loss 0.9496, acc 0.6663 (100.4s) | lr 2.119e-04 | updates 648/1782
+Ep 13 | train_loss 0.7906, acc 0.7131 (2617.1s) | val_loss 0.9885, acc 0.6539 (100.0s) | lr 2.018e-04 | updates 702/1782
+Ep 14 | train_loss 0.7362, acc 0.7434 (2594.7s) | val_loss 0.9198, acc 0.6798 (99.7s) | lr 1.917e-04 | updates 756/1782
+Ep 15 | train_loss 0.6877, acc 0.7592 (2599.6s) | val_loss 0.9139, acc 0.6831 (100.2s) | lr 1.816e-04 | updates 810/1782
+Ep 16 | train_loss 0.6382, acc 0.7768 (2633.3s) | val_loss 0.9201, acc 0.6955 (98.8s) | lr 1.715e-04 | updates 864/1782
+Ep 17 | train_loss 0.6007, acc 0.7876 (2627.9s) | val_loss 0.9012, acc 0.6989 (99.6s) | lr 1.614e-04 | updates 918/1782
+Ep 18 | train_loss 0.5723, acc 0.7991 (2623.9s) | val_loss 0.8832, acc 0.7202 (100.3s) | lr 1.513e-04 | updates 972/1782
+Ep 19 | train_loss 0.5434, acc 0.8094 (2662.8s) | val_loss 0.8966, acc 0.7157 (101.2s) | lr 1.412e-04 | updates 1026/1782
+Ep 20 | train_loss 0.5232, acc 0.8199 (2656.9s) | val_loss 0.8427, acc 0.7247 (101.6s) | lr 1.311e-04 | updates 1080/1782
+Ep 21 | train_loss 0.4843, acc 0.8307 (2659.3s) | val_loss 0.8087, acc 0.7562 (100.5s) | lr 1.210e-04 | updates 1134/1782
+Ep 22 | train_loss 0.4350, acc 0.8510 (2663.5s) | val_loss 0.7729, acc 0.7506 (101.2s) | lr 1.109e-04 | updates 1188/1782
+Ep 23 | train_loss 0.4112, acc 0.8587 (2660.9s) | val_loss 0.7933, acc 0.7596 (104.5s) | lr 1.008e-04 | updates 1242/1782
+Ep 24 | train_loss 0.3970, acc 0.8620 (2700.6s) | val_loss 0.7622, acc 0.7753 (101.1s) | lr 9.071e-05 | updates 1296/1782
+Ep 25 | train_loss 0.3809, acc 0.8693 (2669.2s) | val_loss 0.7454, acc 0.7775 (101.1s) | lr 8.061e-05 | updates 1350/1782
+Ep 26 | train_loss 0.3552, acc 0.8789 (2664.9s) | val_loss 0.7239, acc 0.7888 (100.8s) | lr 7.051e-05 | updates 1404/1782
+Ep 27 | train_loss 0.3542, acc 0.8798 (2663.6s) | val_loss 0.7299, acc 0.7685 (101.2s) | lr 6.041e-05 | updates 1458/1782
+Ep 28 | train_loss 0.3503, acc 0.8807 (2673.1s) | val_loss 0.7187, acc 0.7899 (101.6s) | lr 5.031e-05 | updates 1512/1782
+Ep 29 | train_loss 0.3234, acc 0.8912 (2669.5s) | val_loss 0.7235, acc 0.7876 (101.5s) | lr 4.021e-05 | updates 1566/1782
+Ep 30 | train_loss 0.3137, acc 0.8938 (2670.3s) | val_loss 0.7135, acc 0.7955 (101.5s) | lr 3.011e-05 | updates 1620/1782
+Ep 31 | train_loss 0.3052, acc 0.8989 (2663.4s) | val_loss 0.7011, acc 0.7966 (100.5s) | lr 2.001e-05 | updates 1674/1782
+Ep 32 | train_loss 0.3062, acc 0.9001 (2659.4s) | val_loss 0.6949, acc 0.7955 (101.2s) | lr 9.913e-06 | updates 1728/1782
+Ep 33 | train_loss 0.2948, acc 0.9024 (2660.2s) | val_loss 0.7078, acc 0.8022 (100.6s) | lr -1.870e-07 | updates 1782/1782
+--------------------------------------------------------------------------------
+Log saved to: /mnt/drive7/projects/my_project/RACE_Attention/arxiv_lsh_sparse_644K.txt

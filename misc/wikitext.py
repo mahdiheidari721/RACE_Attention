@@ -162,11 +162,17 @@ def exact_attention_sdpa(query, key, value, scale=None, causal=False):
         scale = D ** -0.5
 
     if query.device.type == "cuda":
-        q16, k16, v16 = [t.to(torch.float16) for t in (query, key, value)]
-        with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
-            out = F.scaled_dot_product_attention(
-                q16, k16, v16, dropout_p=0.0, is_causal=causal, scale=scale)
-        out = out.to(query.dtype)
+        cap = torch.cuda.get_device_capability(query.device)
+        if cap[0] * 10 + cap[1] >= 80:  # sm80+ required for Flash Attention
+            q16, k16, v16 = [t.to(torch.float16) for t in (query, key, value)]
+            with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
+                out = F.scaled_dot_product_attention(
+                    q16, k16, v16, dropout_p=0.0, is_causal=causal, scale=scale)
+            out = out.to(query.dtype)
+        else:
+            with sdpa_kernel(SDPBackend.MATH):
+                out = F.scaled_dot_product_attention(
+                    query, key, value, dropout_p=0.0, is_causal=causal, scale=scale)
     else:
         out = F.scaled_dot_product_attention(
             query, key, value, dropout_p=0.0, is_causal=causal, scale=scale)
@@ -1364,7 +1370,7 @@ def run_experiment(attn_type, num_epochs=100, batch_size=16,
 # ============================================================================
 
 SHARED_CFG = dict(
-    epochs        = 40,                # RACE paper setting
+    epochs        = 100,                # RACE paper setting
     lr            = 6e-4,
     weight_decay  = 0.1,
     batch_size    = 16,                 # RACE paper setting
@@ -1381,9 +1387,9 @@ SHARED_CFG = dict(
 )
 
 EXPERIMENTS = [
-    #dict(method="exact",        grad_accum_steps=1),
+    dict(method="exact",        grad_accum_steps=1),
     #dict(method="elsaa",        grad_accum_steps=1),
-    dict(method="causal_race",  grad_accum_steps=1),
+    #dict(method="causal_race",  grad_accum_steps=1),
     #dict(method="linear",       grad_accum_steps=1),
     # dict(method="causal_sparse",grad_accum_steps=1),
     # dict(method="elsaa_lambda", grad_accum_steps=1),

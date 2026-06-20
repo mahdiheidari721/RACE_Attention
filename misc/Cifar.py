@@ -130,9 +130,17 @@ def exact_attention_sdpa(query, key, value, scale=None, causal=False):
 
     if query.device.type == "cuda":
         q16, k16, v16 = [t.to(torch.float16) for t in (query, key, value)]
-        with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
-            out = F.scaled_dot_product_attention(
-                q16, k16, v16, dropout_p=0.0, is_causal=causal, scale=scale)
+        import warnings
+        backends = [SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH]
+        for backend in backends:
+            try:
+                with warnings.catch_warnings(), sdpa_kernel(backend):
+                    warnings.simplefilter("ignore")
+                    out = F.scaled_dot_product_attention(
+                        q16, k16, v16, dropout_p=0.0, is_causal=causal, scale=scale)
+                break
+            except RuntimeError:
+                continue
         out = out.to(query.dtype)
     else:
         out = F.scaled_dot_product_attention(
@@ -673,6 +681,13 @@ class CausalELSAAAttention(nn.Module):
             nn.Linear(gate_hidden, 2),
         )
 
+        # Logging cache
+        self.last_gates = None
+        self.last_m_sparse = None
+        self.last_lambda = None
+        self.last_d_sparse_mean = None
+        self.last_d_race_mean = None
+
     def _compute_lambda(self, x):
         if self.lambda_dep:
             with torch.no_grad():
@@ -733,6 +748,13 @@ class CausalELSAAAttention(nn.Module):
         # Shared output projection
         fused = head_fused.transpose(1, 2).contiguous().view(B, T, H * Dk)
         out = self.o(self.out_drop(fused))
+
+        # Logging cache
+        self.last_gates = gates.detach()
+        self.last_m_sparse = m_sparse.detach()
+        self.last_lambda = lam.detach() if isinstance(lam, torch.Tensor) else lam
+        self.last_d_sparse_mean = torch.exp(log_d_sparse.detach().clamp(max=20.0)).mean()
+        self.last_d_race_mean = d_race.detach().mean()
 
         return out
 
@@ -937,6 +959,33 @@ class LinearWarmupLR(torch.optim.lr_scheduler._LRScheduler):
         return out
 
 
+def collect_attn_stats(model, attn_type):
+    """Collect ELSAA-specific stats for wandb logging."""
+    stats = {}
+    if attn_type not in ("elsaa", "elsaa_lambda"):
+        return stats
+    for li, blk in enumerate(model.layers):
+        att = getattr(blk, "att", None)
+        if att is None:
+            continue
+        if hasattr(att, "last_gates") and att.last_gates is not None:
+            g = att.last_gates
+            stats[f"gates/layer{li}_sparse"] = g[..., 0].mean().item()
+            stats[f"gates/layer{li}_race"] = g[..., 1].mean().item()
+        if hasattr(att, "last_m_sparse") and att.last_m_sparse is not None:
+            stats[f"m_sparse/layer{li}_mean"] = att.last_m_sparse.mean().item()
+        if hasattr(att, "last_lambda") and att.last_lambda is not None:
+            if isinstance(att.last_lambda, torch.Tensor):
+                stats[f"lambda/layer{li}_mean"] = att.last_lambda.float().mean().item()
+        if hasattr(att, "log_lambda"):
+            stats[f"lambda_param/layer{li}"] = float(att.log_lambda.detach().exp().item())
+        if hasattr(att, "last_d_sparse_mean") and att.last_d_sparse_mean is not None:
+            stats[f"denominators/layer{li}_sparse"] = float(att.last_d_sparse_mean.item())
+        if hasattr(att, "last_d_race_mean") and att.last_d_race_mean is not None:
+            stats[f"denominators/layer{li}_race"] = float(att.last_d_race_mean.item())
+    return stats
+
+
 def train_one_run(model, train_dl, test_dl, optimizer, cfg, attn_type,
                   num_epochs, grad_accum_steps, log_to_wandb=True):
     steps_per_epoch = len(train_dl)
@@ -1006,6 +1055,8 @@ def train_one_run(model, train_dl, test_dl, optimizer, cfg, attn_type,
         test_loss = 0.0
         test_correct = 0
         test_total = 0
+        attn_stats_acc = defaultdict(list)
+        
         with torch.no_grad():
             for images, labels in tqdm(test_dl, desc=f"Ep{epoch} test", leave=False):
                 images = images.to(DEVICE)
@@ -1016,6 +1067,11 @@ def train_one_run(model, train_dl, test_dl, optimizer, cfg, attn_type,
                 preds = logits.argmax(dim=-1)
                 test_correct += (preds == labels).sum().item()
                 test_total += labels.size(0)
+                
+                # Collect ELSAA stats from test batches
+                s = collect_attn_stats(model, attn_type)
+                for k, v in s.items():
+                    attn_stats_acc[k].append(v)
 
         if DEVICE == "cuda":
             torch.cuda.synchronize()
@@ -1033,6 +1089,10 @@ def train_one_run(model, train_dl, test_dl, optimizer, cfg, attn_type,
             "lr": cur_lr,
             "time/train_sec": train_time, "time/test_sec": test_time,
         }
+        
+        # Add ELSAA stats (averaged over test batches)
+        for k, vlist in attn_stats_acc.items():
+            log[k] = float(np.mean(vlist))
 
         if log_to_wandb and HAS_WANDB:
             wandb.log(log, step=epoch)
@@ -1053,7 +1113,7 @@ DEFAULT_CFG = {
     "img_size": 32,
     "patch_size": 1,        # 2 → 256 tokens, 4 → 64 tokens, 1 → 1024 tokens
     "num_channels": 3,
-    "num_patches": 1024,     # Will be recomputed from img_size / patch_size
+    "num_patches": 1024,    # Will be recomputed from img_size / patch_size
     "num_classes": 10,      # Will be set based on dataset
     # Transformer
     "embed_dim": 256,
@@ -1067,7 +1127,7 @@ DEFAULT_CFG = {
     "hyper_block_size": 32,
     "hyper_min_seq_len": 64,
     # RACE branch
-    "race_num_bits": 4,
+    "race_num_bits": 3,
     "race_num_tables": 4,
     "race_chunk_size": 32,
     # Linear baseline
@@ -1086,7 +1146,7 @@ DEFAULT_CFG = {
 
 
 def run_experiment(attn_type, dataset_name="cifar10", num_epochs=100, 
-                   batch_size=128, grad_accum_steps=1, lr=3e-4, weight_decay=0.05,
+                   batch_size=64, grad_accum_steps=2, lr=3e-4, weight_decay=0.05,
                    wandb_project="ELSAA_CIFAR", **overrides):
     cfg = dict(DEFAULT_CFG)
     cfg.update(overrides)
@@ -1125,6 +1185,12 @@ def run_experiment(attn_type, dataset_name="cifar10", num_epochs=100,
         wandb.define_metric("train/*", step_metric="epoch")
         wandb.define_metric("test/*", step_metric="epoch")
         wandb.define_metric("lr", step_metric="epoch")
+        wandb.define_metric("time/*", step_metric="epoch")
+        wandb.define_metric("gates/*", step_metric="epoch")
+        wandb.define_metric("m_sparse/*", step_metric="epoch")
+        wandb.define_metric("lambda/*", step_metric="epoch")
+        wandb.define_metric("lambda_param/*", step_metric="epoch")
+        wandb.define_metric("denominators/*", step_metric="epoch")
 
     try:
         best_acc = train_one_run(
@@ -1146,24 +1212,21 @@ def run_experiment(attn_type, dataset_name="cifar10", num_epochs=100,
 # Run both CIFAR-10 and CIFAR-100 with the same attention method
 EXPERIMENTS = [
     # CIFAR-10 experiments
-    dict(dataset="cifar10", method="exact",         batch_size=128, epochs=100),
-    #dict(dataset="cifar10", method="linear",        batch_size=128, epochs=100),
-    
-    dict(dataset="cifar10", method="causal_race",   batch_size=128, epochs=100),
-    
-    dict(dataset="cifar10", method="elsaa",         batch_size=128, epochs=100),
+    #dict(dataset="cifar10", method="exact",         batch_size=128, epochs=100),
+    #dict(dataset="cifar10", method="linear",        batch_size=32, epochs=100),
+    dict(dataset="cifar10", method="performer",     batch_size=32, epochs=100),
+    #dict(dataset="cifar10", method="causal_race",   batch_size=128, epochs=100),
+    #dict(dataset="cifar10", method="causal_sparse", batch_size=128, epochs=100),
+    #dict(dataset="cifar10", method="elsaa",         batch_size=64, epochs=100),
     
     # CIFAR-100 experiments (harder, 100 classes)
-    dict(dataset="cifar100", method="exact",         batch_size=128, epochs=100),
-    #dict(dataset="cifar100", method="linear",        batch_size=128, epochs=100),
     
-    dict(dataset="cifar100", method="causal_race",   batch_size=128, epochs=100),
-    
-    dict(dataset="cifar100", method="elsaa",         batch_size=128, epochs=100),
-    dict(dataset="cifar100", method="causal_sparse", batch_size=128, epochs=100),
-    dict(dataset="cifar10", method="causal_sparse", batch_size=128, epochs=100),
-    dict(dataset="cifar10", method="performer",     batch_size=128, epochs=100),
-    dict(dataset="cifar100", method="performer",     batch_size=128, epochs=100),
+    #dict(dataset="cifar100", method="exact",         batch_size=128, epochs=100),
+    #dict(dataset="cifar100", method="linear",        batch_size=32, epochs=100),
+    dict(dataset="cifar100", method="performer",     batch_size=32, epochs=100),
+    #dict(dataset="cifar100", method="causal_race",   batch_size=128, epochs=100),
+    #dict(dataset="cifar100", method="causal_sparse", batch_size=128, epochs=100),
+    #dict(dataset="cifar100", method="elsaa",         batch_size=64, epochs=100),
 ]
 
 
@@ -1177,7 +1240,7 @@ def main():
         method = exp.pop("method")
         epochs = exp.pop("epochs")
         batch_size = exp.pop("batch_size")
-        grad_accum_steps = exp.get("grad_accum_steps", 1)
+        grad_accum_steps = exp.get("grad_accum_steps", 2)
         
         print(f"\n{'='*70}")
         print(f"  Experiment {i}/{len(EXPERIMENTS)}: {dataset.upper()} + {method}")
